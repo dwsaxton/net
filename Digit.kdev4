@@ -1,0 +1,4 @@
+[Project]
+Name=Digit
+Manager=KDevCMakeManager
+VersionControl=kdevgit
