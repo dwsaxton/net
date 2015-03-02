@@ -1,6 +1,10 @@
-#include <iostream>
+#include <QApplication>
+
+#include "interface.h"
 
 int main(int argc, char **argv) {
-    std::cout << "Hello, world!" << std::endl;
-    return 0;
+  QApplication app(argc, argv);
+  Interface interface;
+  interface.show();
+  return app.exec();
 }
