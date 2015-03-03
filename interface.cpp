@@ -28,12 +28,12 @@ Interface::Interface()
   images_[12] = image12;
   images_[13] = image13;
   images_[14] = image14;
-
+  
   QThread *thread = new QThread;
-  worker = new Worker;
-  worker->moveToThread(thread);
-  connect(thread, SIGNAL(started()), worker, SLOT(process()));
-  connect(worker, SIGNAL(dataReady()), this, SLOT(updateImages()));
+  worker_ = new Worker;
+  worker_->moveToThread(thread);
+  connect(thread, SIGNAL(started()), worker_, SLOT(process()));
+  connect(worker_, SIGNAL(dataReady()), this, SLOT(updateImages()));
   thread->start();
 }
 
@@ -42,7 +42,7 @@ void Interface::updateImages() {
     QImage image(5, 5, QImage::Format_RGB32);
     for (int x = 0; x < 5; ++x) {
       for (int y = 0; y < 5; ++y) {
-        double value = worker->net_->layers_[1].boxes[i].weights.mask[0](x, y);
+        double value = worker_->net_->layers_[1].boxes[i].weights.mask[0](x, y);
         if (value < -1) {
           value = -1;
         } else if (value > 1) {
@@ -54,13 +54,17 @@ void Interface::updateImages() {
     }
     images_[i]->setPixmap(QPixmap::fromImage(image));
   }
+  for (int i = 0; i < 10; ++i) {
+    QImage image = worker_->failing[i].toQImage();
+    images_[i+5]->setPixmap(QPixmap::fromImage(image));
+  }
 }
       
 //   for (int i = 0; i < 15; ++i) {
 //     QImage image(20, 20, QImage::Format_RGB32);
 //     for (int j = 0; j < 20; ++j) {
 //       for (int k = 0; k < 20; ++k) {
-//         double value = worker->net_->layers_[1].boxes[i].weights.mask[0](j, k);
+//         double value = worker_->net_->layers_[1].boxes[i].weights.mask[0](j, k);
 //         if (value < -1) {
 //           value = -1;
 //         } else if (value > 1) {

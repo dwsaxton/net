@@ -8,27 +8,36 @@ using namespace std;
 #include <Eigen/Geometry>
 using namespace Eigen;
 
-struct Image {
-  MatrixXd pixels; // pixels that make up the image
+class QImage;
+
+const int TRAINING_COUNT = 60000;
+const int TEST_COUNT = 10000;
+
+class Image {
+public:
+  MatrixXf pixels; // pixels that make up the image
   int digit; // in range 0 to 9
+  QImage toQImage();
 };
 
 class Mnist {
 public:
   Mnist();
+  
+  void init();
 
-  int trainingCount() const { return 60000; }
-  int testCount() const { return 10000; }
+  int trainingCount() const { return TRAINING_COUNT; }
+  int testCount() const { return TEST_COUNT; }
   Image getTraining(int i) const { return training_[i]; }
   Image getTest(int i) const { return test_[i]; }
   void print(Image const& image) const;
 
 private:
-  void initImages(ifstream& labels, ifstream& pixels, int count, Image* images);
-  void resize(MatrixXd &pixels) const;
+  void initImages(ifstream& labels, ifstream& pixels, int count, vector<Image> & images);
+  void resize(MatrixXf &pixels) const;
 
-  Image training_[60000];
-  Image test_[10000];
+  vector<Image> training_;
+  vector<Image> test_;
 };
 
 #endif // MNIST_H

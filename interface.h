@@ -21,7 +21,7 @@ private slots:
   void updateImages();
 
 private:
-  Worker *worker;
+  Worker *worker_;
   vector<QLabel*> images_;
 };
 

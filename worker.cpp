@@ -17,7 +17,7 @@ void Worker::process() {
   // number of boxes in the different "layers"
   const int first_layer = 5;
   const int second_layer = 20;
-  const int third_layer = 20;
+  const int third_layer = 40;
   
   LayerParams layer0;
   layer0.connection_type = LayerParams::Initial;
@@ -71,42 +71,58 @@ void Worker::process() {
 //   vector<LayerParams> params = {layer0, layer1, layer2};
   
   net_ = new ConvNet(params);
-  mnist_ = new Mnist();
+  mnist_.init();
 
-  int training_count = mnist_->trainingCount();
+  int training_count = mnist_.trainingCount();
+  
+  float learning_rate = 0.05;
     
+  int epoch = 0;
+  
   while (true) {
     for (int i = 0; i < training_count; ++i) {
       if (i % 1000 == 0) {
         emit dataReady();
   //       cout << "Doing training " << i << "..." << endl;
       }
-      Image image = mnist_->getTraining(i);
+      Image image = mnist_.getTraining(i);
       net_->forwardPass(image.pixels);
-      VectorXd target(10);
+      VectorXf target(10);
       if (i % 1000 == 0) {
         cout << "a=" << net_->getOutput().transpose() << " digit=" << image.digit << endl;
       }
       target.setZero();
       target[image.digit] = 1;
-      net_->backwardsPass(target);
+      net_->backwardsPass(target, learning_rate);
       
-      if (i % 1000 == 0) {
+      if (i % 10000 == 0) {
         test();
       }
     }
+    
+    epoch++;
+    if (epoch % 2 == 0) {
+      learning_rate *= 0.5;
+      if (learning_rate < 0.001) {
+        learning_rate = 0.001;
+      }
+    }
+    cout << " epoch finished, new learning rate " << learning_rate << endl;
   }
 }
 
 void Worker::test() {
-  int test_count = mnist_->testCount();
+  int test_count = mnist_.testCount();
+  
+  int failing_count[10] = {0};
   
   int total = 0;
   for (int i = 0; i < test_count; ++i) {
-    Image image = mnist_->getTraining(i);
+    Image image = mnist_.getTraining(i);
     net_->forwardPass(image.pixels);
-    VectorXd out = net_->getOutput();
-    double target_best = out(image.digit);
+    VectorXf out = net_->getOutput();
+    int target_digit = image.digit;
+    float target_best = out(target_digit);
     bool good = true;
     for (int j = 0; j < 10; ++j) {
       if (i != j && out(j) > target_best) {
@@ -116,45 +132,13 @@ void Worker::test() {
     }
     if (good) {
       total++;
+    } else {
+      failing_count[target_digit]++;
+      if (rand() % failing_count[target_digit] == 0) {
+        failing[target_digit] = image;
+      }
     }
   }
   
   cout << " Score: " << total << " (" << (100.0 * total / test_count) << "%)" << endl;
 }
-
-#if 0
-void Worker::process()
-{
-  net_ = NeuralNet(vector<int>({784, 15, 10}));
-    net_.initRandom();
-  Mnist mnist;
-
-  double eps = 1;
-  for (int round = 0; round < 4; ++round) {
-    int training_count = mnist.trainingCount();
-    for (int i = 0; i < training_count; ++i) {
-      if (i % 200 == 0) {
-        emit dataReady();
-  //       cout << "Doing training " << i << "..." << endl;
-      }
-      Image image = mnist.getTraining(i);
-      net_.setInput(image.pixels);
-  //     net_.a_[0] = image.pixels;
-      net_.calcActivations();
-      VectorXd target(10);
-      if (i % 200 == 0) {
-        cout << "a=" << net_.output().transpose() << " digit=" << image.digit << endl;
-      }
-      target.setZero();
-      target[image.digit] = 1;
-      net_.calcDeriv(target);
-      net_.subtractDeriv(eps);
-    }
-    eps *= 0.2;
-  }
-  
-  VectorXd target(10);
-  target << 1,0,0,0,0,0,0,0,0,0;
-  net_.calcDeriv(target);
-}
-#endif

@@ -4,6 +4,9 @@
 #include <iostream>
 using namespace std;
 
+ConvNet::ConvNet() {
+}
+
 ConvNet::ConvNet(vector<LayerParams> const& params) {
   layer_count_ = params.size();
   assert(layer_count_ >= 1);
@@ -38,11 +41,11 @@ ConvNet::ConvNet(vector<LayerParams> const& params) {
   }
 }
 
-double sigmoid(double x) {
+float sigmoid(float x) {
   return 1 / (1 + exp(-x));
 }
 
-void ConvNet::forwardPass(MatrixXd const& input) {
+void ConvNet::forwardPass(MatrixXf const& input) {
   int range_i = params_[0].box_edge - input.rows();
   int range_j = params_[0].box_edge - input.cols();
   assert(range_i >= 0);
@@ -98,16 +101,16 @@ void ConvNet::forwardPass(MatrixXd const& input) {
   }
 }
 
-VectorXd ConvNet::getOutput() const {
+VectorXf ConvNet::getOutput() const {
   int count = params_[layer_count_ - 1].box_count;
-  VectorXd output(count);
+  VectorXf output(count);
   for (int i = 0; i < count; ++i) {
     output[i] = layers_[layer_count_ - 1].boxes[i].values(0, 0);
   }
   return output;
 }
 
-void ConvNet::backwardsPass(VectorXd const& target) {
+void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
   // already checked earlier, but do it here too to indicate where it gets used
   assert(params_[layer_count_ - 1].box_edge == 1);
   
@@ -133,8 +136,8 @@ void ConvNet::backwardsPass(VectorXd const& target) {
       Box & box = layers_[layer].boxes[box_index];
       if (params_[layer].connection_type == LayerParams::Full) { 
         assert(second_edge == 1); // assuming each box is a "singleton" box
-        double value = box.values(0, 0);
-        double deriv_value = box.deriv_values(0, 0);
+        float value = box.values(0, 0);
+        float deriv_value = box.deriv_values(0, 0);
         box.weights.doSigmoidOfConvDeriv(layers_[layer - 1], 0, 0, value, deriv_value);
         continue;
       }
@@ -158,24 +161,20 @@ void ConvNet::backwardsPass(VectorXd const& target) {
           if (params_[layer + 1].connection_type == LayerParams::Pooling && (i % 2 == 1 || j % 2 == 1)) {
             continue;
           }
-          double value = box.values(i, j);
-          double deriv_value = box.deriv_values(i, j);
+          float value = box.values(i, j);
+          float deriv_value = box.deriv_values(i, j);
           box.weights.doSigmoidOfConvDeriv(layers_[layer - 1], i, j, value, deriv_value);
         }
       }
     }
   }
   
-  updateWeights();
-}
-
-void ConvNet::updateWeights() {
   for (int layer = 1; layer < layer_count_; ++layer) {
     int first_edge = params_[layer - 1].box_edge;
     int second_edge = params_[layer].box_edge;
     int box_count = params_[layer].box_count;
     for (int box_index = 0; box_index < box_count; ++box_index) {
-      layers_[layer].boxes[box_index].weights.update(0.9, 0.01);
+      layers_[layer].boxes[box_index].weights.update(0.9, learning_rate);
     }
   }
 }
@@ -208,22 +207,22 @@ void ConvWeights::initRandom(int input_box_count, int mask_edge) {
   deriv_mask.resize(input_box_count);
   momentum_mask.resize(input_box_count);
   for (int i = 0; i < input_box_count; ++i) {
-    mask[i] = 0.1 * MatrixXd::Random(mask_edge, mask_edge);
-    deriv_mask[i] = MatrixXd::Zero(mask_edge, mask_edge);
-    momentum_mask[i] = MatrixXd::Zero(mask_edge, mask_edge);
+    mask[i] = 0.1 * MatrixXf::Random(mask_edge, mask_edge);
+    deriv_mask[i] = MatrixXf::Zero(mask_edge, mask_edge);
+    momentum_mask[i] = MatrixXf::Zero(mask_edge, mask_edge);
   }
   bias = 0;
   deriv_bias = 0;
 }
 
-double ConvWeights::sigmoidOfConv(Layer const& input, const int x, const int y) const {
+float ConvWeights::sigmoidOfConv(Layer const& input, const int x, const int y) const {
   int input_box_count = input.boxCount();
   assert(input_box_count == mask.size());
   
   int mask_edge = mask[0].rows();
   assert(mask_edge > 0);
   
-  double sum = bias;
+  float sum = bias;
   for (int b = 0; b < input_box_count; ++b) {
     sum += input.boxes[b].values.block(x, y, mask_edge, mask_edge).cwiseProduct(mask[b]).sum();
   }
@@ -231,7 +230,7 @@ double ConvWeights::sigmoidOfConv(Layer const& input, const int x, const int y) 
   return sigmoid(sum);
 }
 
-void ConvWeights::doSigmoidOfConvDeriv(Layer& input, const int x, const int y, double value, double deriv_value) {
+void ConvWeights::doSigmoidOfConvDeriv(Layer& input, const int x, const int y, float value, float deriv_value) {
   int input_box_count = input.boxCount();
   assert(input_box_count == mask.size());
   
@@ -242,7 +241,7 @@ void ConvWeights::doSigmoidOfConvDeriv(Layer& input, const int x, const int y, d
     cout << "v=" << value << endl;
   }
   assert(value >= 0 && value <= 1); // it's output of a sigmoid function, so should be bounded
-  double base = deriv_value * value * (1 - value);
+  float base = deriv_value * value * (1 - value);
   
   deriv_bias = base;
   for (int b = 0; b < input_box_count; ++b) {
@@ -251,7 +250,7 @@ void ConvWeights::doSigmoidOfConvDeriv(Layer& input, const int x, const int y, d
   }
 }
 
-void ConvWeights::update(double momentum_decay, double eps) {
+void ConvWeights::update(float momentum_decay, float eps) {
   int input_box_count = mask.size();
   momentum_bias = momentum_decay * momentum_bias + eps * deriv_bias;
   bias -= momentum_bias;

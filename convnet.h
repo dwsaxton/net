@@ -13,11 +13,12 @@ class LayerParams;
 
 class ConvNet {
 public:
+  ConvNet();
   ConvNet(vector<LayerParams> const& params);
   
-  void forwardPass(MatrixXd const& input);
-  void backwardsPass(VectorXd const& target);
-  VectorXd getOutput() const;
+  void forwardPass(MatrixXf const& input);
+  void backwardsPass(const VectorXf& target, float learning_rate);
+  VectorXf getOutput() const;
   
 // private:
   void updateWeights();
@@ -54,21 +55,21 @@ public:
   
   void initRandom(int input_box_count, int mask_edge);
   
-  vector<MatrixXd> mask;
-  double bias;
+  vector<MatrixXf> mask;
+  float bias;
   
-  vector<MatrixXd> deriv_mask;
-  double deriv_bias;
+  vector<MatrixXf> deriv_mask;
+  float deriv_bias;
   
-  vector<MatrixXd> momentum_mask;
-  double momentum_bias;
+  vector<MatrixXf> momentum_mask;
+  float momentum_bias;
   
   void setDerivsZero();
   
   // returns sigmoid(<mask, input-with-top-left-at-x-and-y> + bias).
-  double sigmoidOfConv(Layer const& input, const int x, const int y) const;
-  void doSigmoidOfConvDeriv(Layer& input, const int x, const int y, double value, double deriv_value);
-  void update(double momentum_decay, double eps);
+  float sigmoidOfConv(Layer const& input, const int x, const int y) const;
+  void doSigmoidOfConvDeriv(Layer& input, const int x, const int y, float value, float deriv_value);
+  void update(float momentum_decay, float eps);
 };
 
 class Layer {
@@ -90,11 +91,11 @@ public:
   int edge() const { return values.rows(); }
   
   // The values of the nodes in this box
-  MatrixXd values;
+  MatrixXf values;
   // In the case that this layer has a Convolution connection with the previous layer, then the weights used.
   ConvWeights weights;
   // For back propagation
-  MatrixXd deriv_values;
+  MatrixXf deriv_values;
 };
 
 #endif

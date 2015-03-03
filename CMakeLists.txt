@@ -1,5 +1,14 @@
 project(digit)
-
-add_executable(digit main.cpp)
-
+cmake_minimum_required(VERSION 2.6)
+find_package(Qt4 COMPONENTS REQUIRED)
+include_directories(${QT_INCLUDES} ${CMAKE_CURRENT_BINARY_DIR} /usr/include/eigen3)
+SET(CMAKE_CXX_FLAGS "-std=c++0x")
+set(CMAKE_AUTOMOC ON)
+set(Digit_SRCS convnet.cpp mnist.cpp neuralnet.cpp main.cpp interface.cpp worker.cpp)
+set(Digit_FORMS interface.ui)
+set(CMAKE_BUILD_TYPE Release)
+QT4_WRAP_UI(Digit_FORMS_HEADERS ${Digit_FORMS})
+qt4_automoc(${Digit_SRCS})
+add_executable(digit ${Digit_SRCS} ${Digit_FORMS_HEADERS} )
+target_link_libraries(digit ${QT_QTCORE_LIBRARY} ${QT_QTGUI_LIBRARY})
 install(TARGETS digit RUNTIME DESTINATION bin)

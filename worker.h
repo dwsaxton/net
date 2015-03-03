@@ -4,9 +4,8 @@
 #include <QObject>
 
 #include "convnet.h"
+#include "mnist.h"
 #include "neuralnet.h"
-
-class Mnist;
 
 class Worker : public QObject
 {
@@ -17,7 +16,9 @@ public:
   ~Worker();
   
   ConvNet *net_;
-  Mnist *mnist_;
+  
+  Image failing[10];
+  
 //   NeuralNet net_;
 
 public slots:
@@ -28,6 +29,8 @@ signals:
   
 private:
   void test();
+  
+  Mnist mnist_;
 };
 
 #endif // WORKER_H
