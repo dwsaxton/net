@@ -58,12 +58,11 @@ void Interface::updateImages() {
     QImage image = worker_->failing[i].toQImage();
     images_[i+5]->setPixmap(QPixmap::fromImage(image));
   }
-}
       
 //   for (int i = 0; i < 15; ++i) {
-//     QImage image(20, 20, QImage::Format_RGB32);
-//     for (int j = 0; j < 20; ++j) {
-//       for (int k = 0; k < 20; ++k) {
+//     QImage image(28, 28, QImage::Format_RGB32);
+//     for (int j = 0; j < 28; ++j) {
+//       for (int k = 0; k < 28; ++k) {
 //         double value = worker_->net_->layers_[1].boxes[i].weights.mask[0](j, k);
 //         if (value < -1) {
 //           value = -1;
@@ -76,4 +75,4 @@ void Interface::updateImages() {
 //     }
 //     images_[i]->setPixmap(QPixmap::fromImage(image));
 //   }
-// }
+}

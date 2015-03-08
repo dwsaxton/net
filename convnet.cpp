@@ -4,6 +4,9 @@
 #include <iostream>
 using namespace std;
 
+const float WEIGHT_DECAY = 0.00001;
+const float MOMENTUM = 0.9;
+
 ConvNet::ConvNet() {
 }
 
@@ -29,6 +32,10 @@ ConvNet::ConvNet(vector<LayerParams> const& params) {
       assert(params[i-1].box_edge % 2 == 1); // doing subsampling pooling
       assert((params[i-1].box_edge + 1) / 2 == params[i].box_edge);
       assert(params[i-1].box_count == params[i].box_count);
+      layers_[i].initPlain(params[i].box_count, params[i].box_edge);
+    } else if (type == LayerParams::SoftMax) {
+      assert(params[i].box_count == params[i - 1].box_count);
+      assert(params[i].box_edge == params[i - 1].box_edge);
       layers_[i].initPlain(params[i].box_count, params[i].box_edge);
     } else {
       assert(type == LayerParams::Full);
@@ -63,6 +70,27 @@ void ConvNet::forwardPass(MatrixXf const& input) {
     int first_edge = params_[layer - 1].box_edge;
     int second_edge = params_[layer].box_edge;
     int box_count = params_[layer].box_count;
+    
+    if (params_[layer].connection_type == LayerParams::SoftMax) {
+      float sum = 0;
+      for (int box_index = 0; box_index < box_count; ++box_index) {
+        Box & box = layers_[layer].boxes[box_index];
+        Box & prev_box = layers_[layer - 1].boxes[box_index];
+        for (int i = 0; i < second_edge; ++i) {
+          for (int j = 0; j < second_edge; ++j) {
+            float value = exp(prev_box.values(i, j));
+            sum += value;
+            box.values(i, j) = value;
+          }
+        }
+      }
+      for (int box_index = 0; box_index < box_count; ++box_index) {
+        Box & box = layers_[layer].boxes[box_index];
+        box.values /= sum;
+      }
+      continue;
+    }
+    
     for (int box_index = 0; box_index < box_count; ++box_index) {
       Box & box = layers_[layer].boxes[box_index];
       
@@ -110,6 +138,15 @@ VectorXf ConvNet::getOutput() const {
   return output;
 }
 
+VectorXf ConvNet::get2ndOutput() const {
+  int count = params_[layer_count_ - 2].box_count;
+  VectorXf output(count);
+  for (int i = 0; i < count; ++i) {
+    output[i] = layers_[layer_count_ - 2].boxes[i].values(0, 0);
+  }
+  return output;
+}
+
 void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
   // already checked earlier, but do it here too to indicate where it gets used
   assert(params_[layer_count_ - 1].box_edge == 1);
@@ -117,7 +154,7 @@ void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
   assert(params_[layer_count_ - 1].box_count == target.size());
   
   for (int i = 0; i < layer_count_; ++i) {
-    layers_[i].setDerivsZero();
+    layers_[i].setDerivsZero(learning_rate * WEIGHT_DECAY);
   }
   
   // Initialize the first set of derivatives, using the error function
@@ -132,6 +169,28 @@ void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
     int first_edge = params_[layer - 1].box_edge;
     int second_edge = params_[layer].box_edge;
     int box_count = params_[layer].box_count;
+    
+    if (params_[layer].connection_type == LayerParams::SoftMax) {
+      assert(second_edge == 1); // assuming each box is a "singleton" box
+      assert(first_edge == 1); // similarly for layer below
+      
+      for (int box_index = 0; box_index < box_count; ++box_index) {
+        Box & box = layers_[layer].boxes[box_index];
+        float value = box.values(0, 0);
+        float deriv = box.deriv_values(0, 0);
+        for (int box_index_2 = 0; box_index_2 < box_count; ++box_index_2) {
+          Box & lower_box = layers_[layer - 1].boxes[box_index_2];
+          if (box_index_2 == box_index) {
+            lower_box.deriv_values(0, 0) += deriv * value * (1 - value);
+          } else {
+            float value2 = layers_[layer].boxes[box_index_2].values(0, 0);
+            lower_box.deriv_values(0, 0) += - deriv * value * value2;
+          }
+        }
+      }
+      continue;
+    }
+    
     for (int box_index = 0; box_index < box_count; ++box_index) {
       Box & box = layers_[layer].boxes[box_index];
       if (params_[layer].connection_type == LayerParams::Full) { 
@@ -170,11 +229,14 @@ void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
   }
   
   for (int layer = 1; layer < layer_count_; ++layer) {
+    if (params_[layer].connection_type == LayerParams::SoftMax) {
+      continue;
+    }
     int first_edge = params_[layer - 1].box_edge;
     int second_edge = params_[layer].box_edge;
     int box_count = params_[layer].box_count;
     for (int box_index = 0; box_index < box_count; ++box_index) {
-      layers_[layer].boxes[box_index].weights.update(0.9, learning_rate);
+      layers_[layer].boxes[box_index].weights.update(MOMENTUM, learning_rate);
     }
   }
 }
@@ -195,10 +257,10 @@ void Layer::initConv(int box_count, int box_edge, int input_box_count, int mask_
   }
 }
 
-void Layer::setDerivsZero() {
+void Layer::setDerivsZero(float weight_decay) {
   for (int i = 0; i < boxes.size(); ++i) {
     boxes[i].deriv_values.setZero();
-    boxes[i].weights.setDerivsZero();
+    boxes[i].weights.setDerivsZero(weight_decay);
   }
 }
 
@@ -261,9 +323,9 @@ void ConvWeights::update(float momentum_decay, float eps) {
 }
 
 
-void ConvWeights::setDerivsZero() {
-  deriv_bias = 0;
+void ConvWeights::setDerivsZero(float weight_decay) {
+  deriv_bias = -weight_decay * bias;
   for (int i = 0; i < deriv_mask.size(); ++i) {
-    deriv_mask[i].setZero();
+    deriv_mask[i] = -weight_decay * mask[i];
   }
 }

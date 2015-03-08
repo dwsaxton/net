@@ -19,6 +19,7 @@ public:
   void forwardPass(MatrixXf const& input);
   void backwardsPass(const VectorXf& target, float learning_rate);
   VectorXf getOutput() const;
+  VectorXf get2ndOutput() const;
   
 // private:
   void updateWeights();
@@ -34,7 +35,8 @@ public:
     Initial,
     Convolution,
     Pooling,
-    Full
+    Full,
+    SoftMax
   };
   
   LayerParams() { box_edge = box_count = mask_edge = 0; connection_type = Initial; }
@@ -64,7 +66,7 @@ public:
   vector<MatrixXf> momentum_mask;
   float momentum_bias;
   
-  void setDerivsZero();
+  void setDerivsZero(float weight_decay);
   
   // returns sigmoid(<mask, input-with-top-left-at-x-and-y> + bias).
   float sigmoidOfConv(Layer const& input, const int x, const int y) const;
@@ -76,7 +78,7 @@ class Layer {
 public:
   int boxCount() const { return boxes.size(); }
   
-  void setDerivsZero();
+  void setDerivsZero(float weight_decay);
   
   vector<Box> boxes;
   

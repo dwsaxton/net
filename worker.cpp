@@ -56,8 +56,18 @@ void Worker::process() {
   layer6.box_count = 10;
   layer6.box_edge = 1;
   
-  vector<LayerParams> params = {layer0, layer1, layer2, layer3, layer4, layer5, layer6};
+  LayerParams layer7;
+  layer7.connection_type = LayerParams::SoftMax;
+  layer7.box_count = 10;
+  layer7.box_edge = 1;
   
+  vector<LayerParams> params = {layer0, layer1, layer2, layer3, layer4, layer5, layer6, layer7};
+  
+//   LayerParams layer0;
+//   layer0.connection_type = LayerParams::Initial;
+//   layer0.box_count = 1;
+//   layer0.box_edge = 28;
+//   
 //   LayerParams layer1;
 //   layer1.connection_type = LayerParams::Full;
 //   layer1.box_count = 15;
@@ -85,17 +95,18 @@ void Worker::process() {
         emit dataReady();
   //       cout << "Doing training " << i << "..." << endl;
       }
-      Image image = mnist_.getTraining(i);
+      Image image = mnist_.getTraining(rand() % training_count);
       net_->forwardPass(image.pixels);
       VectorXf target(10);
       if (i % 1000 == 0) {
         cout << "a=" << net_->getOutput().transpose() << " digit=" << image.digit << endl;
+        cout << "a=" << net_->get2ndOutput().transpose() << " digit=" << image.digit << endl;
       }
       target.setZero();
       target[image.digit] = 1;
       net_->backwardsPass(target, learning_rate);
       
-      if (i % 10000 == 0) {
+      if (i % 5000 == 0) {
         test();
       }
     }
@@ -107,10 +118,11 @@ void Worker::process() {
         learning_rate = 0.001;
       }
     }
-    cout << " epoch finished, new learning rate " << learning_rate << endl;
+//     cout << " epoch finished, new learning rate " << learning_rate << endl;
   }
 }
 
+static int test_number = 0;
 void Worker::test() {
   int test_count = mnist_.testCount();
   
@@ -125,7 +137,7 @@ void Worker::test() {
     float target_best = out(target_digit);
     bool good = true;
     for (int j = 0; j < 10; ++j) {
-      if (i != j && out(j) > target_best) {
+      if (target_digit != j && out(j) >= target_best) {
         good = false;
         break;
       }
@@ -141,4 +153,9 @@ void Worker::test() {
   }
   
   cout << " Score: " << total << " (" << (100.0 * total / test_count) << "%)" << endl;
+//   cout << 1.0 * total / test_count << endl;
+  
+//   if (++test_number == 100 ) {
+//     exit(0);
+//   }
 }
