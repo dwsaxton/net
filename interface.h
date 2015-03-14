@@ -23,6 +23,7 @@ private slots:
 private:
   Worker *worker_;
   vector<QLabel*> images_;
+  vector<QLabel*> layers_;
 };
 
 #endif // INTERFACE_H

@@ -19,7 +19,7 @@ public:
   
   Image failing[10];
   
-//   NeuralNet net_;
+  Image sampleRandomTraining() const;
 
 public slots:
   void process();

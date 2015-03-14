@@ -4,6 +4,7 @@
 #include <iostream>
 using namespace std;
 
+#include <QPainter>
 #include <QThread>
 
 #include "worker.h"
@@ -29,12 +30,39 @@ Interface::Interface()
   images_[13] = image13;
   images_[14] = image14;
   
+  layers_.resize(4);
+  layers_[0] = layer0;
+  layers_[1] = layer1;
+  layers_[2] = layer2;
+  layers_[3] = layer3;
+  
   QThread *thread = new QThread;
   worker_ = new Worker;
   worker_->moveToThread(thread);
   connect(thread, SIGNAL(started()), worker_, SLOT(process()));
   connect(worker_, SIGNAL(dataReady()), this, SLOT(updateImages()));
   thread->start();
+}
+
+QImage toQImage(MatrixXf values, float min, float max) {
+  int rows = values.rows();
+  int cols = values.cols();
+  QImage image(rows, cols, QImage::Format_RGB32);
+  for (int i = 0; i < rows; ++i) {
+    for (int j = 0; j < cols; ++j) {
+      float v = values(i, j);
+      if (max == min) {
+//         cout << v
+        v = 0;
+      } else {
+        v = (v - min) / (max - min);
+      }
+//       cout << "v=" << v << endl;
+      int grey = (int) (255 * v);
+      image.setPixel(i, j, QColor(grey, grey, grey).rgb());
+    }
+  }
+  return image;
 }
 
 void Interface::updateImages() {
@@ -52,13 +80,60 @@ void Interface::updateImages() {
         image.setPixel(x, y, QColor(grey, grey, grey).rgb());
       }
     }
-    images_[i]->setPixmap(QPixmap::fromImage(image));
+    images_[i]->setPixmap(QPixmap::fromImage(image.scaled(100, 100)));
   }
   for (int i = 0; i < 10; ++i) {
     QImage image = worker_->failing[i].toQImage();
     images_[i+5]->setPixmap(QPixmap::fromImage(image));
   }
-      
+
+  
+  Image image = worker_->sampleRandomTraining();
+  layers_[0]->setPixmap(QPixmap::fromImage(image.toQImage()));
+  worker_->net_->forwardPass(image.pixels);
+  
+  int layers[3] = {2, 4, 5};
+  int col_count[3] = {5, 10, 20};
+  int row_count[3] = {1, 2, 2};
+  int box_image_size[3] = {100, 50, 25};
+  
+  for (int i = 0; i < 3; ++i ) {
+    QImage image(500, row_count[i] * box_image_size[i], QImage::Format_RGB32);
+    QPainter painter(&image);
+    
+    Layer const & layer = worker_->net_->layers_[layers[i]];
+    int box_count = layer.boxes.size();
+    
+    
+    float min = HUGE_VAL;
+    float max = -HUGE_VAL;
+    for (int box = 0; box < box_count; ++box) {
+      MatrixXf const& values = layer.boxes[box].values;
+      int rows = values.rows();
+      int cols = values.cols();
+      for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+          float v = values(i, j);
+          if (v > max) {
+            max = v;
+          }
+          if (v < min) {
+            min = v;
+          }
+        }
+      }
+    }
+    
+    for (int box = 0; box < box_count; ++box) {
+      QImage box_image = toQImage(layer.boxes[box].values, min, max);
+      int edge = box_image_size[i];
+      QRect dest_pos(edge * (box % col_count[i]), edge * (box / col_count[i]), edge, edge);
+      painter.drawImage(dest_pos, box_image);
+    }
+    
+    layers_[i+1]->setPixmap(QPixmap::fromImage(image));
+  }
+  
 //   for (int i = 0; i < 15; ++i) {
 //     QImage image(28, 28, QImage::Format_RGB32);
 //     for (int j = 0; j < 28; ++j) {

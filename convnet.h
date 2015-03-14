@@ -66,7 +66,7 @@ public:
   vector<MatrixXf> momentum_mask;
   float momentum_bias;
   
-  void setDerivsZero(float weight_decay);
+  void setDerivsZero();
   
   // returns sigmoid(<mask, input-with-top-left-at-x-and-y> + bias).
   float sigmoidOfConv(Layer const& input, const int x, const int y) const;
@@ -78,7 +78,7 @@ class Layer {
 public:
   int boxCount() const { return boxes.size(); }
   
-  void setDerivsZero(float weight_decay);
+  void setDerivsZero();
   
   vector<Box> boxes;
   
