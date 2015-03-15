@@ -92,27 +92,23 @@ void Worker::process() {
   
   net_ = new ConvNet(params);
   mnist_.init();
-
-  int training_count = mnist_.trainingCount();
   
   float learning_rate = 0.005;
-    
-  int epoch = 0;
-  
+
   bool trailing_correct[1000] = {false};
   int trailing_at = 0;
   int trailing_count = 0;
   
-  while (true) {
-    for (int i = 0; i < training_count; ++i) {
-      bool dataReady = i % 5000 == 0;
-      
-      if (dataReady) {
-        emit this->dataReady();
-  //       cout << "Doing training " << i << "..." << endl;
-      }
+  for (int epoch = 0; ; ++epoch) {
+    RandomTransform transform(4, 0.2, 2.5);
+    
+    for (int i = 0; i < mnist_.trainingCount(); ++i) {
       Image image = sampleRandomTraining();
-      net_->forwardPass(image.pixels);
+      VectorXf target(10);
+      target.setZero();
+      target[image.digit] = 1;
+      net_->backwardsPass(target, learning_rate);
+      net_->forwardPass(image.generate(transform));
       
       bool correct = isCorrect(net_->getOutput(), image.digit);
       if (trailing_correct[trailing_at]) {
@@ -124,23 +120,16 @@ void Worker::process() {
       }
       trailing_at = (trailing_at + 1) % 1000;
       
-      if (dataReady) {
+      if (i % 5000 == 0) {
         cout << "a=" << net_->getOutput().transpose() << " digit=" << image.digit << endl;
         cout << "trailing=" << (trailing_count / 10.0) << "%" << endl;
 //         cout << "2=" << net_->get2ndOutput().transpose() << " digit=" << image.digit << endl;
-      }
-      VectorXf target(10);
-      target.setZero();
-      target[image.digit] = 1;
-      net_->backwardsPass(target, learning_rate);
-      
-      if (dataReady) {
         test();
+        emit this->dataReady();
       }
     }
     
-    epoch++;
-    if (epoch % 2 == 0) {
+    if ((epoch + 1) % 2 == 0) {
       learning_rate *= 0.5;
       if (learning_rate < 0.000001) {
         learning_rate = 0.000001;

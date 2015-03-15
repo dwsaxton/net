@@ -1,7 +1,7 @@
 project(digit)
 cmake_minimum_required(VERSION 2.6)
 find_package(Qt4 COMPONENTS REQUIRED)
-include_directories(${QT_INCLUDES} ${CMAKE_CURRENT_BINARY_DIR} /usr/include/eigen3)
+include_directories(${QT_INCLUDES} ${CMAKE_CURRENT_BINARY_DIR} /usr/include/eigen3 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.9.sdk/usr/include/c++/4.2.1)
 SET(CMAKE_CXX_FLAGS "-std=c++0x")
 set(CMAKE_AUTOMOC ON)
 set(Digit_SRCS convnet.cpp mnist.cpp neuralnet.cpp main.cpp interface.cpp worker.cpp)

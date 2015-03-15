@@ -21,6 +21,8 @@ private slots:
   void updateImages();
 
 private:
+  void showRandomTransformed();
+  
   Worker *worker_;
   vector<QLabel*> images_;
   vector<QLabel*> layers_;

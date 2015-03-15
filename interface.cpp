@@ -36,12 +36,14 @@ Interface::Interface()
   layers_[2] = layer2;
   layers_[3] = layer3;
   
-  QThread *thread = new QThread;
-  worker_ = new Worker;
-  worker_->moveToThread(thread);
-  connect(thread, SIGNAL(started()), worker_, SLOT(process()));
-  connect(worker_, SIGNAL(dataReady()), this, SLOT(updateImages()));
-  thread->start();
+  showRandomTransformed();
+  
+//   QThread *thread = new QThread;
+//   worker_ = new Worker;
+//   worker_->moveToThread(thread);
+//   connect(thread, SIGNAL(started()), worker_, SLOT(process()));
+//   connect(worker_, SIGNAL(dataReady()), this, SLOT(updateImages()));
+//   thread->start();
 }
 
 QImage toQImage(MatrixXf values, float min, float max) {
@@ -63,6 +65,19 @@ QImage toQImage(MatrixXf values, float min, float max) {
     }
   }
   return image;
+}
+
+void Interface::showRandomTransformed() {
+  Mnist mnist;
+  mnist.init();
+  
+  Image image = mnist.getTraining(random() % mnist.trainingCount());
+  
+  for (int i = 0; i < 15; ++i) {
+    RandomTransform transform(4, 0.2, 2.5);
+    MatrixXf mapped = image.generate(transform);
+    images_[i]->setPixemap(QPixmap::fromImage(toQImage(mapped, 0, 1));
+  }
 }
 
 void Interface::updateImages() {
