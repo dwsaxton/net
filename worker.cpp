@@ -26,8 +26,8 @@ bool isCorrect(VectorXf const& out, int target) {
 void Worker::process() {
   // number of boxes in the different "layers"
   const int first_layer = 5;
-  const int second_layer = 20;
-  const int third_layer = 40;
+  const int second_layer = 50;
+  const int third_layer = 100;
   
   LayerParams layer0;
   layer0.connection_type = LayerParams::Initial;
@@ -93,24 +93,24 @@ void Worker::process() {
   net_ = new ConvNet(params);
   mnist_.init();
   
-  float learning_rate = 0.005;
+  float learning_rate = 0.0005;
 
   bool trailing_correct[1000] = {false};
   int trailing_at = 0;
   int trailing_count = 0;
   
   for (int epoch = 0; ; ++epoch) {
-    RandomTransform transform(4, 0.2, 2.5);
+    RandomTransform transform(10, 0.15, 2.5);
     
     for (int i = 0; i < mnist_.trainingCount(); ++i) {
       Image image = sampleRandomTraining();
       VectorXf target(10);
       target.setZero();
-      target[image.digit] = 1;
-      net_->backwardsPass(target, learning_rate);
+      target[image.digit()] = 1;
       net_->forwardPass(image.generate(transform));
+      net_->backwardsPass(target, learning_rate);
       
-      bool correct = isCorrect(net_->getOutput(), image.digit);
+      bool correct = isCorrect(net_->getOutput(), image.digit());
       if (trailing_correct[trailing_at]) {
         trailing_count --;
       }
@@ -121,7 +121,7 @@ void Worker::process() {
       trailing_at = (trailing_at + 1) % 1000;
       
       if (i % 5000 == 0) {
-        cout << "a=" << net_->getOutput().transpose() << " digit=" << image.digit << endl;
+        cout << "a=" << net_->getOutput().transpose() << " digit=" << image.digit() << endl;
         cout << "trailing=" << (trailing_count / 10.0) << "%" << endl;
 //         cout << "2=" << net_->get2ndOutput().transpose() << " digit=" << image.digit << endl;
         test();
@@ -152,9 +152,9 @@ void Worker::test() {
   int total = 0;
   for (int i = 0; i < test_count; ++i) {
     Image image = mnist_.getTraining(i);
-    net_->forwardPass(image.pixels);
+    net_->forwardPass(image.original());
     VectorXf out = net_->getOutput();
-    int target_digit = image.digit;
+    int target_digit = image.digit();
     bool good = isCorrect(out, target_digit);
     if (good) {
       total++;

@@ -36,14 +36,15 @@ void Mnist::initImages(ifstream & labels, ifstream & pixels, int count, vector<I
     pixels.read((char*) image.data(), 784);
     char label;
     labels.read(&label, 1);
-    images[i].set(label, image.cast<float>() / 255.0);
+    images[i].set(image.cast<float>() / 255.0, label);
   }
 }
 
 void Mnist::print(Image const& image) const {
-  for (int i = 0; i < image.pixels.cols(); ++i) {
-    for (int j = 0; j < image.pixels.rows(); ++j) {
-      float value = image.pixels(j, i);
+  MatrixXf pixels = image.original();
+  for (int i = 0; i < pixels.cols(); ++i) {
+    for (int j = 0; j < pixels.rows(); ++j) {
+      float value = pixels(j, i);
       cout << (value > 0.5 ? "*" : " ");
     }
     cout << endl;
@@ -89,9 +90,14 @@ void Image::set(MatrixXf const& pixels, int digit) {
   pixels_cropped_ = pixels.block(first_i, first_j, range_i, range_j);
 }
 
-std::default_random_engine const generator;
+MatrixXf Image::generate(RandomTransform const& transform) const {
+  Interpolator interpolator(transform);
+  return interpolator.apply(pixels_orig_);
+}
 
-float safeGet(MatrixXf const& input, int i, int j) const {
+std::default_random_engine generator_;
+
+float safeGet(MatrixXf const& input, int i, int j) {
   if (i < 0 || i >= input.rows() || j < 0 || j >= input.cols()) {
     return 0;
   }
@@ -115,8 +121,8 @@ GaussianBlur::GaussianBlur(float std_dev) {
 }
   
 MatrixXf GaussianBlur::apply(MatrixXf const& m0) const {
-  int r = input.rows();
-  int c = input.cols();
+  int r = m0.rows();
+  int c = m0.cols();
   int mid = (coeffs_.size() - 1) / 2;
   
   MatrixXf m1(r, c);
@@ -155,10 +161,10 @@ AffineTransform::AffineTransform(float eps) {
   assert(eps > 0 && eps < 1); // sanity check
   std::normal_distribution<float> dist(0, eps);
   
-  a_ = dist(generator);
-  b_ = dist(generator);
-  c_ = dist(generator);
-  d_ = dist(generator);
+  a_ = dist(generator_);
+  b_ = dist(generator_);
+  c_ = dist(generator_);
+  d_ = dist(generator_);
 }
 
 QPointF AffineTransform::map(QPointF const& input) const {
@@ -175,8 +181,8 @@ ElasticTransform::ElasticTransform(float eps, GaussianBlur const& blur) {
   
   for (int i = 0; i < 28; ++i) {
     for (int j = 0; j < 28; ++j) {
-      delta_x_(i, j) = dist(generator);
-      delta_y_(i, j) = dist(generator);
+      delta_x_(i, j) = dist(generator_);
+      delta_y_(i, j) = dist(generator_);
     }
   }
   
@@ -185,7 +191,7 @@ ElasticTransform::ElasticTransform(float eps, GaussianBlur const& blur) {
 }
 
 QPointF ElasticTransform::map(QPoint const& input) const {
-  return QPointF(delta_x_[input.x()], delta_y_[input.y()]) + input;
+  return QPointF(delta_x_(input.x()), delta_y_(input.y())) + input;
 }
 
 Interpolator::Interpolator(RandomTransform const& transform)

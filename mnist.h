@@ -114,6 +114,7 @@ public:
   MatrixXf apply(MatrixXf const& input) const;
   
 private:
-  RandomTransform transform)_;
+  RandomTransform transform_;
+};
 
 #endif // MNIST_H

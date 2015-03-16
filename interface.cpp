@@ -46,7 +46,7 @@ Interface::Interface()
 //   thread->start();
 }
 
-QImage toQImage(MatrixXf values, float min, float max) {
+QImage toQImage(MatrixXf values, float min = 0, float max = 1) {
   int rows = values.rows();
   int cols = values.cols();
   QImage image(rows, cols, QImage::Format_RGB32);
@@ -74,9 +74,9 @@ void Interface::showRandomTransformed() {
   Image image = mnist.getTraining(random() % mnist.trainingCount());
   
   for (int i = 0; i < 15; ++i) {
-    RandomTransform transform(4, 0.2, 2.5);
+    RandomTransform transform(10, 0.15, 2.5);
     MatrixXf mapped = image.generate(transform);
-    images_[i]->setPixemap(QPixmap::fromImage(toQImage(mapped, 0, 1));
+    images_[i]->setPixmap(QPixmap::fromImage(toQImage(mapped, 0, 1)));
   }
 }
 
@@ -98,14 +98,14 @@ void Interface::updateImages() {
     images_[i]->setPixmap(QPixmap::fromImage(image.scaled(100, 100)));
   }
   for (int i = 0; i < 10; ++i) {
-    QImage image = worker_->failing[i].toQImage();
+    QImage image = toQImage(worker_->failing[i].original());
     images_[i+5]->setPixmap(QPixmap::fromImage(image));
   }
 
   
   Image image = worker_->sampleRandomTraining();
-  layers_[0]->setPixmap(QPixmap::fromImage(image.toQImage()));
-  worker_->net_->forwardPass(image.pixels);
+  layers_[0]->setPixmap(QPixmap::fromImage(toQImage(image.original())));
+  worker_->net_->forwardPass(image.original());
   
   int layers[3] = {2, 4, 5};
   int col_count[3] = {5, 10, 20};
