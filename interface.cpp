@@ -7,10 +7,13 @@ using namespace std;
 #include <QPainter>
 #include <QThread>
 
+#include "cube.h"
 #include "worker.h"
 
 Interface::Interface()
 {
+  TestCube();
+  
   setupUi(this);
 
   images_.resize(15);

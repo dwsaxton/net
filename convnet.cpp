@@ -1,4 +1,5 @@
 #include "convnet.h"
+#include "cube.h"
 
 #include <cassert>
 #include <iostream>
@@ -47,9 +48,80 @@ ConvNet::ConvNet(vector<LayerParams> const& params) {
   }
 }
 
-// float sigmoid(float x) {
-//   return 1 / (1 + exp(-x));
-// }
+void softMax(Cube const& input, Cube &output) {
+  assert(input.rows() == output.rows());
+  assert(input.cols() == output.cols());
+  assert(input.height() == output.height());
+  assert(input.height() == 1);
+  
+  MatrixXf const& input_data = input.layer(0);
+  MatrixXf & output_data = output.layer(0);
+  
+  float sum = 0;
+  
+  // use max_value to divide the top and bottom of the fraction in SoftMax by exp(max_value),
+  // to avoid float-overflow
+  float max_value = input_data.maxCoeff();
+  for (int i = 0; i < input_data.rows(); ++i) {
+    for (int j = 0; j < input_data.cols(); ++j) {
+      float value = exp(input_data(i, j) - max_value);
+      output_data(i, j) = value;
+      sum += value;
+    }
+  }
+  
+  output_data /= sum;
+}
+
+const float leak = 0.0001;
+
+float relu(float x) {
+  return x > 0 ? x : leak * x;
+}
+
+void convolution(Cube const& input, vector<ConvMask> const& masks, int stride, Cube &output) {
+  int output_features = masks.size();
+  assert(output.d0() == output_features);
+  int edge = masks[0].kernel().d1();
+  assert(edge == masks[0].kernel().d2()); // only support square masks
+  assert(edge % 2 == 1); // only support odd-sized masks
+  int mid = (edge - 1) / 2;
+  assert(masks[0].kernel().d0() == input.d0());
+  
+  assert(input.d1() == input.d2()); // only support square inputs
+  assert(output.d1() == output.d2()); // only support square outputs
+  
+  assert((input.d1() - 1) % stride == 0);
+  assert(output.d1() == (input.d1() - 1) / stride + 1);
+  
+  for (int i = 0; i < output_features; ++i) {
+    for (int j = 0; j < output.d1(); ++j) {
+      for (int k = 0; k < output.d2(); ++k) {
+        int in_x = j * stride;
+        int in_y = k * stride;
+        float sum = masks[i].bias + input.computeKernel(masks[i].kernel, in_x, in_y);
+        output(i, j, k) = relu(sum);
+      }
+    }
+  }
+}
+
+void pooling(Cube const& input, Cube &output) {
+  int d0 = input.d0();
+  assert(output.d0() == d0);
+  int d1 = output.d1();
+  int d2 = output.d2();
+  assert(input.d1() == 2 * d1 - 1);
+  assert(input.d2() == 2 * d2 - 1);
+  
+  for (int i = 0; i < d0; ++i) {
+    for (int j = 0; j < d1; ++j) {
+      for (int k = 0; k < d2; ++k) {
+        output(i, j, k) = input(i, 2 * j, 2 * k);
+      }
+    }
+  }
+}
 
 void ConvNet::forwardPass(MatrixXf const& input) {
   int range_i = params_[0].box_edge - input.rows();
@@ -59,103 +131,86 @@ void ConvNet::forwardPass(MatrixXf const& input) {
   int offset_i = range_i == 0 ? 0 : rand() % range_i;
   int offset_j = range_j == 0 ? 0 : rand() % range_j;
   if (range_i == 0 && range_j == 0) {
-    layers_[0].boxes[0].values = input;
+    layers_[0].values(0) = input;
   } else {
-    layers_[0].boxes[0].values.setZero();
-    layers_[0].boxes[0].values.block(offset_i, offset_j, input.rows(), input.cols()) = input;
+    layers_[0].values(0).setZero();
+    layers_[0].values(0).block(offset_i, offset_j, input.rows(), input.cols()) = input;
   }
   
   for (int layer = 1; layer < layer_count_; ++layer) {
-    int first_edge = params_[layer - 1].box_edge;
-    int second_edge = params_[layer].box_edge;
-    int box_count = params_[layer].box_count;
+    Layer &input = layers_[layer - 1];
+    Layer &output = layers_[layer];
     
-    if (params_[layer].connection_type == LayerParams::SoftMax) {
-      float sum = 0;
-      assert(first_edge == second_edge);
-      assert(second_edge == 1); // required assumption of current implementation
-      
-      // use max_value to divide the top and bottom of the fraction in SoftMax by exp(max_value),
-      // to avoid float-overflow
-      float max_value = -HUGE_VAL;
-      for (int box_index = 0; box_index < box_count; ++box_index) {
-        max_value = max(max_value, layers_[layer - 1].boxes[box_index].values(0, 0));
-      }
-      
-      for (int box_index = 0; box_index < box_count; ++box_index) {
-        Box & box = layers_[layer].boxes[box_index];
-        Box & prev_box = layers_[layer - 1].boxes[box_index];
-        float value = exp(prev_box.values(0, 0) - max_value);
-        if (!isfinite(value)) {
-          cout << " prev_box.values(i, j)=" << prev_box.values(0, 0) << endl;
-        }
-        sum += value;
-        box.values(0, 0) = value;
-      }
-      for (int box_index = 0; box_index < box_count; ++box_index) {
-        Box & box = layers_[layer].boxes[box_index];
-        box.values /= sum;
-        if (!isfinite(box.values.norm())) {
-          cout << "sum=" << sum << endl;
-        }
-      }
-      continue;
-    }
-    
-    for (int box_index = 0; box_index < box_count; ++box_index) {
-      Box & box = layers_[layer].boxes[box_index];
-      
-      if (params_[layer].connection_type == LayerParams::Full) { 
-        assert(second_edge == 1); // assuming each box is a "singleton" box
-        box.values(0, 0) =
-            box.weights.sigmoidOfConv(layers_[layer - 1], 0, 0);
+    switch (params_[layer].connection_type) {
+      case LayerParams::Initial:
+        // already handled
         continue;
-      }
-      
-      if (params_[layer].connection_type == LayerParams::Pooling) {
-        for (int i = 0; i < second_edge; ++i) {
-          for (int j = 0; j < second_edge; ++j) {
-            Box & prev_box = layers_[layer - 1].boxes[box_index];
-            box.values(i, j) = prev_box.values(2 * i, 2 * j);
-          }
-        }
+      case LayerParams::SoftMax:
+        softMax(input.values, output.values);
         continue;
-      }
-      
-      assert(params_[layer].connection_type == LayerParams::Convolution);
-      int mask_edge = params_[layer].mask_edge;
-      assert(mask_edge % 2 == 1);
-      int mid = (mask_edge - 1) / 2;
-      for (int i = 0; i < second_edge; ++i) {
-        for (int j = 0; j < second_edge; ++j) {
-          if (params_[layer + 1].connection_type == LayerParams::Pooling && (i % 2 == 1 || j % 2 == 1)) {
-            continue;
-          }
-          
-          box.values(i, j) = 
-              box.weights.sigmoidOfConv(layers_[layer - 1], i, j);
-        }
-      }
+      case LayerParams::Convolution:
+        int stride = params_[layer + 1].connection_type == LayerParams::Pooling ? 2 : 1;
+        convolution(input.values, input.masks, stride, output.values);
+        continue;
+      case LayerParams::Pooling:
+        pooling(input.values, output.values);
+        continue;
     }
   }
 }
 
 VectorXf ConvNet::getOutput() const {
-  int count = params_[layer_count_ - 1].box_count;
-  VectorXf output(count);
-  for (int i = 0; i < count; ++i) {
-    output[i] = layers_[layer_count_ - 1].boxes[i].values(0, 0);
+  MatrixXf layer = layers_[layer_count_ - 1].layers(0);
+  if (layer.cols() == 1) {
+    return layer.block(0, 0, layer.rows(), 1);
+  } else {
+    assert(layer.rows() == 1);
+    return layer.block(0, 0, 1, layer.cols());
   }
-  return output;
 }
 
-VectorXf ConvNet::get2ndOutput() const {
-  int count = params_[layer_count_ - 2].box_count;
-  VectorXf output(count);
-  for (int i = 0; i < count; ++i) {
-    output[i] = layers_[layer_count_ - 2].boxes[i].values(0, 0);
+void convolutionBack(Cube const& output_value, Cube const& output_deriv, Cube & input_deriv, vector<ConvMask> mask_deriv) {
+  // TODO(saxton) implement this
+  
+  int input_box_count = input.boxCount();
+  assert(input_box_count == mask.size());
+  
+  int mask_edge = mask[0].rows();
+  assert(mask_edge > 0);
+  
+  float base = deriv_value;
+  if (value < 0) {
+    base *= leak;
   }
-  return output;
+  
+  deriv_bias = base;
+  assert(isfinite(base));
+  for (int b = 0; b < input_box_count; ++b) {
+    deriv_mask[b] += base * input.boxes[b].values.block(x, y, mask_edge, mask_edge);
+    input.boxes[b].deriv_values.block(x, y, mask_edge, mask_edge) += base * mask[b];
+  }
+}
+
+void softMaxBack(Cube const& output_value, Cube const& output_deriv, Cube & input_deriv) {
+  // TODO(saxton) implement this
+  
+  assert(second_edge == 1); // assuming each box is a "singleton" box
+  assert(first_edge == 1); // similarly for layer below
+  
+  for (int box = 0; box < box_count; ++box) {
+    Box & box = layers_[layer].boxes[box_index];
+    float value = box.values(0, 0);
+    float deriv = box.deriv_values(0, 0);
+    for (int box_index_2 = 0; box_index_2 < box_count; ++box_index_2) {
+      Box & lower_box = layers_[layer - 1].boxes[box_index_2];
+      if (box_index_2 == box_index) {
+        lower_box.deriv_values(0, 0) += deriv * value * (1 - value);
+      } else {
+        float value2 = layers_[layer].boxes[box_index_2].values(0, 0);
+        lower_box.deriv_values(0, 0) += - deriv * value * value2;
+      }
+    }
+  }
 }
 
 void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
@@ -171,71 +226,30 @@ void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
   // Initialize the first set of derivatives, using the error function
   // E = (1/2) \sum_{i = 1}^{N} (v[i] - target[i])^2
   // so {dE}/{dv[i]} = v[i] - target[i]
+  Layer * layer = & layers_[layer_count_ - 1];
   for (int i = 0; i < target.size(); ++i) {
-    Box & box = layers_[layer_count_ - 1].boxes[i];
-    box.deriv_values(0, 0) = box.values(0, 0) - target(i);
+    layer.deriv_values(i) = layer.values(i, 0, 0) - target(i);
   }
-  
+    
   for (int layer = layer_count_ - 1; layer >= 1; --layer) {
-    int first_edge = params_[layer - 1].box_edge;
-    int second_edge = params_[layer].box_edge;
-    int box_count = params_[layer].box_count;
+    Layer &input = layers_[layer - 1];
+    Layer &output = layers_[layer];
     
-    if (params_[layer].connection_type == LayerParams::SoftMax) {
-      assert(second_edge == 1); // assuming each box is a "singleton" box
-      assert(first_edge == 1); // similarly for layer below
-      
-      for (int box_index = 0; box_index < box_count; ++box_index) {
-        Box & box = layers_[layer].boxes[box_index];
-        float value = box.values(0, 0);
-        float deriv = box.deriv_values(0, 0);
-        for (int box_index_2 = 0; box_index_2 < box_count; ++box_index_2) {
-          Box & lower_box = layers_[layer - 1].boxes[box_index_2];
-          if (box_index_2 == box_index) {
-            lower_box.deriv_values(0, 0) += deriv * value * (1 - value);
-          } else {
-            float value2 = layers_[layer].boxes[box_index_2].values(0, 0);
-            lower_box.deriv_values(0, 0) += - deriv * value * value2;
-          }
-        }
-      }
-      continue;
-    }
     
-    for (int box_index = 0; box_index < box_count; ++box_index) {
-      Box & box = layers_[layer].boxes[box_index];
-      if (params_[layer].connection_type == LayerParams::Full) { 
-        assert(second_edge == 1); // assuming each box is a "singleton" box
-        float value = box.values(0, 0);
-        float deriv_value = box.deriv_values(0, 0);
-        box.weights.doSigmoidOfConvDeriv(layers_[layer - 1], 0, 0, value, deriv_value);
+    switch (params_[layer].connection_type) {
+      case LayerParams::Initial:
+        assert(false); // should only be initial layer for layer = 0
         continue;
-      }
-      
-      if (params_[layer].connection_type == LayerParams::Pooling) {
-        for (int i = 0; i < second_edge; ++i) {
-          for (int j = 0; j < second_edge; ++j) {
-            Box & prev_box = layers_[layer - 1].boxes[box_index];
-            prev_box.deriv_values(2 * i, 2 * j) = box.deriv_values(i, j);
-          }
-        }
+      case LayerParams::Pooling:
+        assert(false); // not currently implemented
         continue;
-      }
-      
-      assert(params_[layer].connection_type == LayerParams::Convolution);
-      int mask_edge = params_[layer].mask_edge;
-      assert(mask_edge % 2 == 1);
-      int mid = (mask_edge - 1) / 2;
-      for (int i = 0; i < second_edge; ++i) {
-        for (int j = 0; j < second_edge; ++j) {
-          if (params_[layer + 1].connection_type == LayerParams::Pooling && (i % 2 == 1 || j % 2 == 1)) {
-            continue;
-          }
-          float value = box.values(i, j);
-          float deriv_value = box.deriv_values(i, j);
-          box.weights.doSigmoidOfConvDeriv(layers_[layer - 1], i, j, value, deriv_value);
-        }
-      }
+      case LayerParams::SoftMax:
+        softMaxBack(output.values, output.deriv_values, input.deriv_values, input.deriv_masks);
+        continue;
+      case LayerParams::Convolution:
+        int stride = params_[layer + 1].connection_type == LayerParams::Pooling ? 2 : 1;
+        convolutionBack(input.values, input.masks, stride, output.values);
+        continue;
     }
   }
   
@@ -288,47 +302,6 @@ void ConvWeights::initRandom(int input_box_count, int mask_edge) {
   deriv_bias = 0;
 }
 
-const float leak = 0.0001;
-
-float ConvWeights::sigmoidOfConv(Layer const& input, const int x, const int y) const {
-  int input_box_count = input.boxCount();
-  assert(input_box_count == mask.size());
-  
-  int mask_edge = mask[0].rows();
-  assert(mask_edge > 0);
-  
-  float sum = bias;
-  for (int b = 0; b < input_box_count; ++b) {
-    sum += input.boxes[b].values.block(x, y, mask_edge, mask_edge).cwiseProduct(mask[b]).sum();
-  }
-  
-  assert(isfinite(sum));
-  if (sum >= 0) {
-    return sum;
-  } else {
-    return leak * sum;
-  }
-}
-
-void ConvWeights::doSigmoidOfConvDeriv(Layer& input, const int x, const int y, float value, float deriv_value) {
-  int input_box_count = input.boxCount();
-  assert(input_box_count == mask.size());
-  
-  int mask_edge = mask[0].rows();
-  assert(mask_edge > 0);
-  
-  float base = deriv_value;
-  if (value < 0) {
-    base *= leak;
-  }
-  
-  deriv_bias = base;
-  assert(isfinite(base));
-  for (int b = 0; b < input_box_count; ++b) {
-    deriv_mask[b] += base * input.boxes[b].values.block(x, y, mask_edge, mask_edge);
-    input.boxes[b].deriv_values.block(x, y, mask_edge, mask_edge) += base * mask[b];
-  }
-}
 
 void ConvWeights::update(float momentum_decay, float eps) {
   int input_box_count = mask.size();

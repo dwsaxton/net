@@ -39,39 +39,31 @@ void Worker::process() {
   layer1.box_count = first_layer;
   layer1.box_edge = 25;
   layer1.mask_edge = 5;
+  layer1.stride = 2;
   
   LayerParams layer2;
-  layer2.connection_type = LayerParams::Pooling;
-  layer2.box_count = first_layer;
-  layer2.box_edge = 13;
+  layer2.connection_type = LayerParams::Convolution;
+  layer2.box_count = second_layer;
+  layer2.box_edge = 9;
+  layer2.mask_edge = 5;
+  layer2.stride = 2;
   
   LayerParams layer3;
   layer3.connection_type = LayerParams::Convolution;
-  layer3.box_count = second_layer;
-  layer3.box_edge = 9;
-  layer3.mask_edge = 5;
+  layer3.box_count = third_layer;
+  layer3.box_edge = 1;
   
   LayerParams layer4;
-  layer4.connection_type = LayerParams::Pooling;
-  layer4.box_count = second_layer;
-  layer4.box_edge = 5;
+  layer4.connection_type = LayerParams::Convolution;
+  layer4.box_count = 10;
+  layer4.box_edge = 1;
   
   LayerParams layer5;
-  layer5.connection_type = LayerParams::Full;
-  layer5.box_count = third_layer;
+  layer5.connection_type = LayerParams::SoftMax;
+  layer5.box_count = 10;
   layer5.box_edge = 1;
   
-  LayerParams layer6;
-  layer6.connection_type = LayerParams::Full;
-  layer6.box_count = 10;
-  layer6.box_edge = 1;
-  
-  LayerParams layer7;
-  layer7.connection_type = LayerParams::SoftMax;
-  layer7.box_count = 10;
-  layer7.box_edge = 1;
-  
-  vector<LayerParams> params = {layer0, layer1, layer2, layer3, layer4, layer5, layer6, layer7};
+  vector<LayerParams> params = {layer0, layer1, layer2, layer3, layer4, layer5};
   
 //   LayerParams layer0;
 //   layer0.connection_type = LayerParams::Initial;
