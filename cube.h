@@ -57,6 +57,8 @@ public:
   int rows() const { return rows_; }
   int cols() const { return cols_; }
   
+  void setZero();
+  
 private:
   void reorder(int *d) const {
     swap(d[0], d[stack_coordinate_]);

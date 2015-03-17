@@ -57,20 +57,36 @@ void softMax(Cube const& input, Cube &output) {
   MatrixXf const& input_data = input.layer(0);
   MatrixXf & output_data = output.layer(0);
   
-  float sum = 0;
-  
   // use max_value to divide the top and bottom of the fraction in SoftMax by exp(max_value),
   // to avoid float-overflow
   float max_value = input_data.maxCoeff();
-  for (int i = 0; i < input_data.rows(); ++i) {
-    for (int j = 0; j < input_data.cols(); ++j) {
-      float value = exp(input_data(i, j) - max_value);
-      output_data(i, j) = value;
-      sum += value;
+  
+  output_data = (input_data.array() - max_value).exp().matrix();
+  output_data /= output_data.sum();
+}
+
+void softMaxBack(Cube const& output_value, Cube const& output_deriv, Cube & input_deriv) {
+  // TODO(saxton) implement this
+  
+  assert(second_edge == 1); // assuming each box is a "singleton" box
+  assert(first_edge == 1); // similarly for layer below
+  
+  
+  
+  for (int box = 0; box < box_count; ++box) {
+    Box & box = layers_[layer].boxes[box_index];
+    float value = box.values(0, 0);
+    float deriv = box.deriv_values(0, 0);
+    for (int box_index_2 = 0; box_index_2 < box_count; ++box_index_2) {
+      Box & lower_box = layers_[layer - 1].boxes[box_index_2];
+      if (box_index_2 == box_index) {
+        lower_box.deriv_values(0, 0) += deriv * value * (1 - value);
+      } else {
+        float value2 = layers_[layer].boxes[box_index_2].values(0, 0);
+        lower_box.deriv_values(0, 0) += - deriv * value * value2;
+      }
     }
   }
-  
-  output_data /= sum;
 }
 
 const float leak = 0.0001;
@@ -101,6 +117,38 @@ void convolution(Cube const& input, vector<ConvMask> const& masks, int stride, C
         int in_y = k * stride;
         float sum = masks[i].bias + input.computeKernel(masks[i].kernel, in_x, in_y);
         output(i, j, k) = relu(sum);
+      }
+    }
+  }
+}
+
+void convolutionBack(Cube const& output_value, Cube const& output_deriv, int stride, Cube & input_deriv, vector<ConvMask> mask_deriv) {
+  // TODO(saxton) implement this
+  
+  int output_features = mask_deriv.size();
+  assert(output_features == output_value.d0());
+  
+  input_deriv.setZero();
+  for (int i = 0; i < mask_deriv.size(); ++i) {
+    mask_deriv[i].setZero();
+  }
+  
+  for (int i = 0; i < output_features; ++i) {
+    for (int j = 0; j < output_value.d1(); ++j) {
+      for (int k = 0; k < output_value.d2(); ++k) {
+	float deriv_base = output_deriv(i, j, k);
+	if (output_value(i, j, k) < 0) {
+	  deriv_base *= leak;
+	}
+	
+	mask_deriv[i].bias += deriv_base;
+	
+        int in_x = j * stride;
+        int in_y = k * stride;
+	
+	// TODO(saxton) check these next two lines
+	input_deriv.block(i, in_x, in_y) += deriv_base * mask_deriv[i];
+	mask_deriv += deriv_base * input_values.block(0, in_x, in_y);
       }
     }
   }
@@ -169,59 +217,11 @@ VectorXf ConvNet::getOutput() const {
   }
 }
 
-void convolutionBack(Cube const& output_value, Cube const& output_deriv, Cube & input_deriv, vector<ConvMask> mask_deriv) {
-  // TODO(saxton) implement this
-  
-  int input_box_count = input.boxCount();
-  assert(input_box_count == mask.size());
-  
-  int mask_edge = mask[0].rows();
-  assert(mask_edge > 0);
-  
-  float base = deriv_value;
-  if (value < 0) {
-    base *= leak;
-  }
-  
-  deriv_bias = base;
-  assert(isfinite(base));
-  for (int b = 0; b < input_box_count; ++b) {
-    deriv_mask[b] += base * input.boxes[b].values.block(x, y, mask_edge, mask_edge);
-    input.boxes[b].deriv_values.block(x, y, mask_edge, mask_edge) += base * mask[b];
-  }
-}
-
-void softMaxBack(Cube const& output_value, Cube const& output_deriv, Cube & input_deriv) {
-  // TODO(saxton) implement this
-  
-  assert(second_edge == 1); // assuming each box is a "singleton" box
-  assert(first_edge == 1); // similarly for layer below
-  
-  for (int box = 0; box < box_count; ++box) {
-    Box & box = layers_[layer].boxes[box_index];
-    float value = box.values(0, 0);
-    float deriv = box.deriv_values(0, 0);
-    for (int box_index_2 = 0; box_index_2 < box_count; ++box_index_2) {
-      Box & lower_box = layers_[layer - 1].boxes[box_index_2];
-      if (box_index_2 == box_index) {
-        lower_box.deriv_values(0, 0) += deriv * value * (1 - value);
-      } else {
-        float value2 = layers_[layer].boxes[box_index_2].values(0, 0);
-        lower_box.deriv_values(0, 0) += - deriv * value * value2;
-      }
-    }
-  }
-}
-
 void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
   // already checked earlier, but do it here too to indicate where it gets used
   assert(params_[layer_count_ - 1].box_edge == 1);
   
   assert(params_[layer_count_ - 1].box_count == target.size());
-  
-  for (int i = 0; i < layer_count_; ++i) {
-    layers_[i].setDerivsZero();
-  }
   
   // Initialize the first set of derivatives, using the error function
   // E = (1/2) \sum_{i = 1}^{N} (v[i] - target[i])^2

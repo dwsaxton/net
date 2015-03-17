@@ -73,6 +73,12 @@ MatrixXf & Cube::layer(int i) {
   return data_[i];
 }
 
+void Cube::setZero() {
+  for (int i = 0; i < height_; ++i) {
+    data_[i].setZero();
+  }
+}
+
 void test1() {
   Cube cube(1, 2, 2);
   

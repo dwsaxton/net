@@ -55,13 +55,16 @@ class ConvMask {
 public:
   Cube kernel;
   float bias;
+  
+  void setZero() {
+    bias = 0;
+    kernel.setZero();
+  }
 }
 
 class Layer {
 public:
   int boxCount() const { return conv_weights.size(); }
-  
-  void setDerivsZero();
   
   Cube values;
   Cube deriv_values;
