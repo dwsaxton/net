@@ -58,6 +58,7 @@ public:
   int cols() const { return cols_; }
   
   void setZero();
+  void setRandom();
   
 private:
   void reorder(int *d) const {

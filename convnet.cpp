@@ -17,33 +17,34 @@ ConvNet::ConvNet(vector<LayerParams> const& params) {
   params_ = params;
   layers_.resize(layer_count_);
   
-  for (int i = 0; i < layer_count_; ++i) {
+  for (int i = layer_count - 1; i >= 0; --i) {
+    layers_[i].value = Cube(params[i].features, params[i].edge, params[i].edge);
+    layers_[i].value_deriv = layers_[i].value;
+    
+    if (i > 0) {
+      int input_features = params[i - 1].features;
+      layers_[i].kernels.resize(input_features);
+      for (int j = 0; j < input_features; ++j) {
+        layers_[i].kernels[j] = Kernel(input_features, params[i].kernel, params[i].kernel);
+        layers_[i].kernels_deriv[j] = layers_[i].kernels[j];
+      }
+    }
+    
+    layers_[i].randomizeKernels();
+    
+    // And do some sanity checking
     LayerParams::ConnectionType type = params[i].connection_type;
     if (i == 0) {
       assert(type == LayerParams::Initial);
       assert(params[i].box_count == 1);
-      layers_[i].initPlain(1, params[i].box_edge);
     } else if (type == LayerParams::Convolution) {
       assert(params[i].mask_edge % 2 == 1);
       int mid = (params[i].mask_edge - 1) / 2;
       assert(params[i].box_edge == params[i - 1].box_edge - 2 * mid);
-      layers_[i].initConv(params[i].box_count, params[i].box_edge, params[i - 1].box_count, params[i].mask_edge);
-    } else if (type == LayerParams::Pooling) {
-      assert(params[i-1].box_edge % 2 == 1); // doing subsampling pooling
-      assert((params[i-1].box_edge + 1) / 2 == params[i].box_edge);
-      assert(params[i-1].box_count == params[i].box_count);
-      layers_[i].initPlain(params[i].box_count, params[i].box_edge);
-    } else if (type == LayerParams::SoftMax) {
+    } else {
+      assert(type == LayerParams::SoftMax);
       assert(params[i].box_count == params[i - 1].box_count);
       assert(params[i].box_edge == params[i - 1].box_edge);
-      layers_[i].initPlain(params[i].box_count, params[i].box_edge);
-    } else {
-      assert(type == LayerParams::Full);
-      // For Full connection layer, currently only have support for singleton boxes
-      // (because we make use of a single ConvWeights per box to store the weights
-      // - to support larger boxes, we'd need a ConvWeights for each node in each box).
-      assert(params[layer_count_ - 1].box_edge == 1);
-      layers_[i].initConv(params[i].box_count, params[i].box_edge, params[i - 1].box_count, params[i - 1].box_edge);
     }
   }
 }
@@ -65,28 +66,15 @@ void softMax(Cube const& input, Cube &output) {
   output_data /= output_data.sum();
 }
 
-void softMaxBack(Cube const& output_value, Cube const& output_deriv, Cube & input_deriv) {
-  // TODO(saxton) implement this
-  
+void softMaxBack(Cube const& output_cube_value, Cube const& output_cube_deriv, Cube & input_cube_deriv) {
   assert(second_edge == 1); // assuming each box is a "singleton" box
   assert(first_edge == 1); // similarly for layer below
   
+  MatrixXf const& output_value = output_cube_value.layer(0);
+  MatrixXf const& output_deriv = output_cube_deriv.layer(0);
+  MatrixXf & input_deriv = input_cube_deriv.layer(0);
   
-  
-  for (int box = 0; box < box_count; ++box) {
-    Box & box = layers_[layer].boxes[box_index];
-    float value = box.values(0, 0);
-    float deriv = box.deriv_values(0, 0);
-    for (int box_index_2 = 0; box_index_2 < box_count; ++box_index_2) {
-      Box & lower_box = layers_[layer - 1].boxes[box_index_2];
-      if (box_index_2 == box_index) {
-        lower_box.deriv_values(0, 0) += deriv * value * (1 - value);
-      } else {
-        float value2 = layers_[layer].boxes[box_index_2].values(0, 0);
-        lower_box.deriv_values(0, 0) += - deriv * value * value2;
-      }
-    }
-  }
+  input_deriv = -output_value.cwiseProduct(output_deriv).sum() * output_value + output_value.cwiseProduct(output_deriv);
 }
 
 const float leak = 0.0001;
@@ -95,7 +83,7 @@ float relu(float x) {
   return x > 0 ? x : leak * x;
 }
 
-void convolution(Cube const& input, vector<ConvMask> const& masks, int stride, Cube &output) {
+void convolution(Cube const& input, vector<Kernel> const& masks, int stride, Cube &output) {
   int output_features = masks.size();
   assert(output.d0() == output_features);
   int edge = masks[0].kernel().d1();
@@ -122,9 +110,7 @@ void convolution(Cube const& input, vector<ConvMask> const& masks, int stride, C
   }
 }
 
-void convolutionBack(Cube const& output_value, Cube const& output_deriv, int stride, Cube & input_deriv, vector<ConvMask> mask_deriv) {
-  // TODO(saxton) implement this
-  
+void convolutionBack(Cube const& output_value, Cube const& output_deriv, int stride, Cube const& input_value, Cube & input_deriv, vector<Kernel> & mask_deriv) {
   int output_features = mask_deriv.size();
   assert(output_features == output_value.d0());
   
@@ -136,36 +122,17 @@ void convolutionBack(Cube const& output_value, Cube const& output_deriv, int str
   for (int i = 0; i < output_features; ++i) {
     for (int j = 0; j < output_value.d1(); ++j) {
       for (int k = 0; k < output_value.d2(); ++k) {
-	float deriv_base = output_deriv(i, j, k);
-	if (output_value(i, j, k) < 0) {
-	  deriv_base *= leak;
-	}
-	
-	mask_deriv[i].bias += deriv_base;
-	
+        float deriv_base = output_deriv(i, j, k);
+        if (output_value(i, j, k) < 0) {
+          deriv_base *= leak;
+        }
+    
         int in_x = j * stride;
         int in_y = k * stride;
-	
-	// TODO(saxton) check these next two lines
-	input_deriv.block(i, in_x, in_y) += deriv_base * mask_deriv[i];
-	mask_deriv += deriv_base * input_values.block(0, in_x, in_y);
-      }
-    }
-  }
-}
-
-void pooling(Cube const& input, Cube &output) {
-  int d0 = input.d0();
-  assert(output.d0() == d0);
-  int d1 = output.d1();
-  int d2 = output.d2();
-  assert(input.d1() == 2 * d1 - 1);
-  assert(input.d2() == 2 * d2 - 1);
-  
-  for (int i = 0; i < d0; ++i) {
-    for (int j = 0; j < d1; ++j) {
-      for (int k = 0; k < d2; ++k) {
-        output(i, j, k) = input(i, 2 * j, 2 * k);
+    
+        input_deriv.block(i, in_x, in_y) += deriv_base * mask_deriv[i];
+        mask_deriv[i].bias += deriv_base;
+        mask_deriv[i] += deriv_base * input_value.block(0, in_x, in_y); // TODO this op doesn't exist
       }
     }
   }
@@ -186,8 +153,8 @@ void ConvNet::forwardPass(MatrixXf const& input) {
   }
   
   for (int layer = 1; layer < layer_count_; ++layer) {
-    Layer &input = layers_[layer - 1];
-    Layer &output = layers_[layer];
+    Layer const& input = layers_[layer - 1];
+    Layer & output = layers_[layer];
     
     switch (params_[layer].connection_type) {
       case LayerParams::Initial:
@@ -200,20 +167,7 @@ void ConvNet::forwardPass(MatrixXf const& input) {
         int stride = params_[layer + 1].connection_type == LayerParams::Pooling ? 2 : 1;
         convolution(input.values, input.masks, stride, output.values);
         continue;
-      case LayerParams::Pooling:
-        pooling(input.values, output.values);
-        continue;
     }
-  }
-}
-
-VectorXf ConvNet::getOutput() const {
-  MatrixXf layer = layers_[layer_count_ - 1].layers(0);
-  if (layer.cols() == 1) {
-    return layer.block(0, 0, layer.rows(), 1);
-  } else {
-    assert(layer.rows() == 1);
-    return layer.block(0, 0, 1, layer.cols());
   }
 }
 
@@ -226,29 +180,25 @@ void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
   // Initialize the first set of derivatives, using the error function
   // E = (1/2) \sum_{i = 1}^{N} (v[i] - target[i])^2
   // so {dE}/{dv[i]} = v[i] - target[i]
-  Layer * layer = & layers_[layer_count_ - 1];
+  Layer & top_layer = layers_[layer_count_ - 1];
   for (int i = 0; i < target.size(); ++i) {
-    layer.deriv_values(i) = layer.values(i, 0, 0) - target(i);
+    top_layer.deriv_values(i) = top_layer.values(i, 0, 0) - target(i);
   }
     
   for (int layer = layer_count_ - 1; layer >= 1; --layer) {
     Layer &input = layers_[layer - 1];
-    Layer &output = layers_[layer];
-    
+    Layer const& output = layers_[layer];
     
     switch (params_[layer].connection_type) {
       case LayerParams::Initial:
         assert(false); // should only be initial layer for layer = 0
-        continue;
-      case LayerParams::Pooling:
-        assert(false); // not currently implemented
         continue;
       case LayerParams::SoftMax:
         softMaxBack(output.values, output.deriv_values, input.deriv_values, input.deriv_masks);
         continue;
       case LayerParams::Convolution:
         int stride = params_[layer + 1].connection_type == LayerParams::Pooling ? 2 : 1;
-        convolutionBack(input.values, input.masks, stride, output.values);
+        convolutionBack(output.values, output.deriv_values, stride, input.values, input.deriv_values, input.deriv_masks);
         continue;
     }
   }
@@ -266,21 +216,16 @@ void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
   }
 }
 
-
-void Layer::initPlain(int box_count, int box_edge) {
-  boxes.resize(box_count);
-  for (int i = 0; i < box_count; ++i) {
-    boxes[i].values.resize(box_edge, box_edge);
-    boxes[i].deriv_values.resize(box_edge, box_edge);
+VectorXf ConvNet::getOutput() const {
+  MatrixXf layer = layers_[layer_count_ - 1].layers(0);
+  if (layer.cols() == 1) {
+    return layer.block(0, 0, layer.rows(), 1);
+  } else {
+    assert(layer.rows() == 1);
+    return layer.block(0, 0, 1, layer.cols());
   }
 }
 
-void Layer::initConv(int box_count, int box_edge, int input_box_count, int mask_edge) {
-  initPlain(box_count, box_edge);
-  for (int i = 0; i < box_count; ++i) {
-    boxes[i].weights.initRandom(input_box_count, mask_edge);
-  }
-}
 
 void Layer::setDerivsZero() {
   for (int i = 0; i < boxes.size(); ++i) {
@@ -289,22 +234,14 @@ void Layer::setDerivsZero() {
   }
 }
 
-void ConvWeights::initRandom(int input_box_count, int mask_edge) {
-  mask.resize(input_box_count);
-  deriv_mask.resize(input_box_count);
-  momentum_mask.resize(input_box_count);
-  for (int i = 0; i < input_box_count; ++i) {
-    mask[i] = 0.1 * MatrixXf::Random(mask_edge, mask_edge);
-    deriv_mask[i] = MatrixXf::Zero(mask_edge, mask_edge);
-    momentum_mask[i] = MatrixXf::Zero(mask_edge, mask_edge);
+void Layer::randomizeKernels() {
+  for (int i = 0; i < kernels.size(); ++i) {
+    kernels[i].cube.setRandom();
   }
-  bias = 0;
-  deriv_bias = 0;
 }
 
-
 void ConvWeights::update(float momentum_decay, float eps) {
-  int input_box_count = mask.size();
+  int input_box_count = mask.size();;
   
   momentum_bias = momentum_decay * momentum_bias + eps * deriv_bias;
   bias -= momentum_bias;
@@ -340,3 +277,4 @@ void ConvWeights::setDerivsZero() {
     deriv_mask[i].setZero();
   }
 }
+

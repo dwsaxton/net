@@ -33,48 +33,50 @@ public:
   enum ConnectionType {
     Initial,
     Convolution,
-    Pooling,
     SoftMax
   };
   
-  LayerParams() { box_edge = box_count = mask_edge = 0; connection_type = Initial; }
+  LayerParams() { edge = features = kernel = stride = 1; connection_type = Initial; }
   
   // Layer is composed of a collection of n x n nodes; this is the value of n
-  int box_edge;
+  int edge;
   // Number of n x n squares in this layer
-  int box_count;
+  int features;
   // Connection with the previous layer
   ConnectionType connection_type;
   // For Convolution or Full connection with the previous layer, the value of b in the b x b template
-  int mask_edge;
+  int kernel;
   // For convolution, the spacing between mask samplings
   int stride;
 };
 
-class ConvMask {
+class Kernel {
 public:
-  Cube kernel;
+  Kernel() { setZero(); }
+  Kernel(int d0, int d1, int d2) {
+    cube = Cube(d0, d1, d2);
+    setZero();
+  }
+  
+  Cube cube;
   float bias;
   
   void setZero() {
     bias = 0;
-    kernel.setZero();
+    cube.setZero();
   }
 }
 
 class Layer {
 public:
-  int boxCount() const { return conv_weights.size(); }
+  int features() const { return kernel.size(); }
   
-  Cube values;
-  Cube deriv_values;
-  vector<ConvMask> masks;
-  vector<ConvMask> deriv_masks;
+  Cube value;
+  Cube value_deriv;
+  vector<Kernel> kernels;
+  vector<Kernel> kernels_deriv;
   
-  // Initializes the layer to have box_count boxes, where each box has edge size box_edge
-  void initPlain(int box_count, int box_edge);
-  // Does initPlain, and in addition initializes the convolution masks randomly using conv_edge size
-  void initConv(int box_count, int box_edge, int input_box_count, int mask_edge);
+  void randomizeKernels();
 };
 
 #endif

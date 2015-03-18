@@ -79,6 +79,12 @@ void Cube::setZero() {
   }
 }
 
+void Cube::setRandom() {
+  for (int i = 0; i < height_; ++i) {
+    data_[i].setRandom(); // (or = MatrixXf::random() ?)
+  }
+}
+
 void test1() {
   Cube cube(1, 2, 2);
   
