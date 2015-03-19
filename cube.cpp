@@ -6,6 +6,16 @@ inline void reorder(int d[], int stack_coordinate) {
   swap(d[0], d[stack_coordinate]);
 }
 
+Cube::Cube() {
+  d0_ = 0;
+  d1_ = 0;
+  d2_ = 0;
+  height_ = 0;
+  rows_ = 0;
+  cols_ = 0;
+  stack_coordinate_ = 0;
+}
+
 Cube::Cube(int d0, int d1, int d2) {
   d0_ = d0;
   d1_ = d1;
@@ -52,7 +62,6 @@ void Cube::init(int * d) {
 float Cube::computeKernel(Cube const& kernel, int i, int j) const {
   assert(kernel.stackCoordinate() == stackCoordinate());
   assert(kernel.d0_ == d0_);
-  
   int s[3] = {0, i, j};
   reorder(s);
   
@@ -63,14 +72,84 @@ float Cube::computeKernel(Cube const& kernel, int i, int j) const {
   return sum;
 }
 
+void Cube::addScaledKernel(float mult, Cube const& kernel, int i, int j) {
+  assert(kernel.stackCoordinate() == stackCoordinate());
+  assert(kernel.d0_ == d0_);
+  int s[3] = {0, i, j};
+  reorder(s);
+  
+  for (int a = 0; a < kernel.height_; ++a) {
+    data_[a + s[0]].block(s[1], s[2], kernel.rows_, kernel.cols_) += kernel.data_[a];
+  }
+}
+
+void Cube::addScaledSubcube(float mult, Cube const& cube, int i, int j) {
+  // TODO I Don't think these coordinates are coorreect1!
+  assert(cube.stackCoordinate() == stackCoordinate());
+  assert(cube.d0_ == d0_);
+  int s[3] = {0, i, j};
+  reorder(s);
+  for (int a = 0; a < cube.height_; ++a) {
+    data_[a] += mult * cube.data_[a + s[0]].block(s[1], s[2], rows_, cols_);
+  }
+}
+
 float & Cube::operator()(int i, int j, int k) {
   int a[3] = {i, j, k};
   reorder(a);
   return data_[a[0]](a[1], a[2]);
 }
+float Cube::operator()(int i, int j, int k) const {
+  int a[3] = {i, j, k};
+  reorder(a);
+  return data_[a[0]](a[1], a[2]);
+}
+
+void Cube::operator+=(Cube const& other) {
+  assert(rows_ == other.rows_);
+  assert(cols_ == other.cols_);
+  assert(height_ == other.height_);
+  for (int i = 0; i < height_; ++i) {
+    data_[i] += other.data_[i];
+  }
+}
+
+void Cube::operator/=(float v) {
+  for (int i = 0; i < height_; ++i) {
+    data_[i] /= v;
+  }
+}
 
 MatrixXf & Cube::layer(int i) {
   return data_[i];
+}
+
+MatrixXf const& Cube::layer(int i) const {
+  return data_[i];
+}
+
+float Cube::squaredNorm() const {
+  float sum = 0;
+  for (int i = 0; i < height_; ++i) {
+    sum += data_[i].squaredNorm();
+  }
+  return sum;
+}
+
+float Cube::maxCoeff() const {
+  float max = -HUGE_VAL;
+  for (int i = 0; i < height_; ++i) {
+    max = std::max(max, data_[i].maxCoeff());
+  }
+  return max;
+}
+
+float Cube::minCoeff() const {
+  float min = HUGE_VAL;
+  for (int i = 0; i < height_; ++i) {
+    min = std::min(min, data_[i].minCoeff());
+  }
+  return min;
 }
 
 void Cube::setZero() {

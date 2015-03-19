@@ -1,11 +1,7 @@
 #ifndef CONVNET_H
 #define CONVNET_H
 
-#include <Eigen/Geometry>
-using namespace Eigen;
-
-#include <vector>
-using namespace std;
+#include "cube.h"
 
 class Box;
 class Layer;
@@ -38,12 +34,12 @@ public:
   
   LayerParams() { edge = features = kernel = stride = 1; connection_type = Initial; }
   
+  // Connection with the previous layer
+  ConnectionType connection_type;
   // Layer is composed of a collection of n x n nodes; this is the value of n
   int edge;
   // Number of n x n squares in this layer
   int features;
-  // Connection with the previous layer
-  ConnectionType connection_type;
   // For Convolution or Full connection with the previous layer, the value of b in the b x b template
   int kernel;
   // For convolution, the spacing between mask samplings
@@ -65,18 +61,26 @@ public:
     bias = 0;
     cube.setZero();
   }
-}
+  
+  /**
+   * Replaces this with scale * this + eps * other.
+   */
+  void scaleAndAddScaled(float scale, float eps, Kernel const& other);
+  void operator+=(Kernel const& other);
+  void operator/=(float v);
+};
 
 class Layer {
 public:
-  int features() const { return kernel.size(); }
+  int features() const { return kernels.size(); }
+  void randomizeKernels();
+  void update(float momentum_decay, float eps);
   
   Cube value;
   Cube value_deriv;
   vector<Kernel> kernels;
   vector<Kernel> kernels_deriv;
-  
-  void randomizeKernels();
+  vector<Kernel> kernels_momentum;
 };
 
 #endif

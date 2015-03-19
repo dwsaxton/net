@@ -26,42 +26,43 @@ bool isCorrect(VectorXf const& out, int target) {
 void Worker::process() {
   // number of boxes in the different "layers"
   const int first_layer = 5;
-  const int second_layer = 50;
-  const int third_layer = 100;
+  const int second_layer = 20;
+  const int third_layer = 40;
   
   LayerParams layer0;
   layer0.connection_type = LayerParams::Initial;
-  layer0.box_count = 1;
-  layer0.box_edge = 29;
+  layer0.features = 1;
+  layer0.edge = 29;
   
   LayerParams layer1;
   layer1.connection_type = LayerParams::Convolution;
-  layer1.box_count = first_layer;
-  layer1.box_edge = 25;
-  layer1.mask_edge = 5;
+  layer1.features = first_layer;
+  layer1.edge = 13;
+  layer1.kernel = 5;
   layer1.stride = 2;
   
   LayerParams layer2;
   layer2.connection_type = LayerParams::Convolution;
-  layer2.box_count = second_layer;
-  layer2.box_edge = 9;
-  layer2.mask_edge = 5;
+  layer2.features = second_layer;
+  layer2.edge = 5;
+  layer2.kernel = 5;
   layer2.stride = 2;
   
   LayerParams layer3;
   layer3.connection_type = LayerParams::Convolution;
-  layer3.box_count = third_layer;
-  layer3.box_edge = 1;
+  layer3.features = third_layer;
+  layer3.edge = 1;
+  layer3.kernel = 5;
   
   LayerParams layer4;
   layer4.connection_type = LayerParams::Convolution;
-  layer4.box_count = 10;
-  layer4.box_edge = 1;
+  layer4.features = 10;
+  layer4.edge = 1;
   
   LayerParams layer5;
   layer5.connection_type = LayerParams::SoftMax;
-  layer5.box_count = 10;
-  layer5.box_edge = 1;
+  layer5.features = 10;
+  layer5.edge = 1;
   
   vector<LayerParams> params = {layer0, layer1, layer2, layer3, layer4, layer5};
   
@@ -92,9 +93,8 @@ void Worker::process() {
   int trailing_count = 0;
   
   for (int epoch = 0; ; ++epoch) {
-    RandomTransform transform(10, 0.15, 2.5);
-    
     for (int i = 0; i < mnist_.trainingCount(); ++i) {
+      RandomTransform transform(10, 0.15, 2.5);
       Image image = sampleRandomTraining();
       VectorXf target(10);
       target.setZero();

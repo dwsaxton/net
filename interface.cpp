@@ -39,14 +39,14 @@ Interface::Interface()
   layers_[2] = layer2;
   layers_[3] = layer3;
   
-  showRandomTransformed();
+//   showRandomTransformed();
   
-//   QThread *thread = new QThread;
-//   worker_ = new Worker;
-//   worker_->moveToThread(thread);
-//   connect(thread, SIGNAL(started()), worker_, SLOT(process()));
-//   connect(worker_, SIGNAL(dataReady()), this, SLOT(updateImages()));
-//   thread->start();
+  QThread *thread = new QThread;
+  worker_ = new Worker;
+  worker_->moveToThread(thread);
+  connect(thread, SIGNAL(started()), worker_, SLOT(process()));
+  connect(worker_, SIGNAL(dataReady()), this, SLOT(updateImages()));
+  thread->start();
 }
 
 QImage toQImage(MatrixXf values, float min = 0, float max = 1) {
@@ -88,7 +88,7 @@ void Interface::updateImages() {
     QImage image(5, 5, QImage::Format_RGB32);
     for (int x = 0; x < 5; ++x) {
       for (int y = 0; y < 5; ++y) {
-        double value = worker_->net_->layers_[1].boxes[i].weights.mask[0](x, y);
+        double value = worker_->net_->layers_[1].kernels[i].cube(0, x, y);
         if (value < -1) {
           value = -1;
         } else if (value > 1) {
@@ -108,49 +108,34 @@ void Interface::updateImages() {
   
   Image image = worker_->sampleRandomTraining();
   layers_[0]->setPixmap(QPixmap::fromImage(toQImage(image.original())));
-  worker_->net_->forwardPass(image.original());
+//   worker_->net_->forwardPass(image.original());
+//   
+//   int layers[3] = {2, 4, 5};
+//   int col_count[3] = {5, 10, 20};
+//   int row_count[3] = {1, 2, 2};
+//   int box_image_size[3] = {100, 50, 25};
+//   
+//   for (int layer_index = 0; layer_index < 3; ++layer_index) {
+//     QImage image(500, row_count[layer_index] * box_image_size[layer_index], QImage::Format_RGB32);
+//     QPainter painter(&image);
+//     
+//     Layer const & layer = worker_->net_->layers_[layers[layer_index]];
+//     int features = layer.features();
+//     
+//     float min = layer.value.minCoeff();
+//     float max = layer.value.maxCoeff();
+//     
+//     for (int box = 0; box < box_count; ++box) {
+//       QImage box_image = toQImage(layer.boxes[box].values, min, max);
+//       int edge = box_image_size[i];
+//       QRect dest_pos(edge * (box % col_count[i]), edge * (box / col_count[i]), edge, edge);
+//       painter.drawImage(dest_pos, box_image);
+//     }
+//     
+//     layers_[i+1]->setPixmap(QPixmap::fromImage(image));
+//   }
   
-  int layers[3] = {2, 4, 5};
-  int col_count[3] = {5, 10, 20};
-  int row_count[3] = {1, 2, 2};
-  int box_image_size[3] = {100, 50, 25};
   
-  for (int i = 0; i < 3; ++i ) {
-    QImage image(500, row_count[i] * box_image_size[i], QImage::Format_RGB32);
-    QPainter painter(&image);
-    
-    Layer const & layer = worker_->net_->layers_[layers[i]];
-    int box_count = layer.boxes.size();
-    
-    
-    float min = HUGE_VAL;
-    float max = -HUGE_VAL;
-    for (int box = 0; box < box_count; ++box) {
-      MatrixXf const& values = layer.boxes[box].values;
-      int rows = values.rows();
-      int cols = values.cols();
-      for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-          float v = values(i, j);
-          if (v > max) {
-            max = v;
-          }
-          if (v < min) {
-            min = v;
-          }
-        }
-      }
-    }
-    
-    for (int box = 0; box < box_count; ++box) {
-      QImage box_image = toQImage(layer.boxes[box].values, min, max);
-      int edge = box_image_size[i];
-      QRect dest_pos(edge * (box % col_count[i]), edge * (box / col_count[i]), edge, edge);
-      painter.drawImage(dest_pos, box_image);
-    }
-    
-    layers_[i+1]->setPixmap(QPixmap::fromImage(image));
-  }
   
 //   for (int i = 0; i < 15; ++i) {
 //     QImage image(28, 28, QImage::Format_RGB32);
