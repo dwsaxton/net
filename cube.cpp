@@ -57,6 +57,8 @@ void Cube::init(int * d) {
   for (int i = 0; i < height_; ++i) {
     data_[i].resize(rows_, cols_);
   }
+  
+  setZero();
 }
   
 float Cube::computeKernel(Cube const& kernel, int i, int j) const {

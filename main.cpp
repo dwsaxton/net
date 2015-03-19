@@ -2,10 +2,11 @@
 
 #include <Eigen/Core>
 
+#include "convnet.h"
 #include "interface.h"
 
 int main(int argc, char **argv) {
-  Eigen::initParallel();
+  TestConvNet();
   QApplication app(argc, argv);
   Interface interface;
   interface.show();

@@ -7,6 +7,8 @@ class Box;
 class Layer;
 class LayerParams;
 
+void TestConvNet();
+
 class ConvNet {
 public:
   ConvNet();
