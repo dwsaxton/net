@@ -68,7 +68,7 @@ public:
    * Replaces this with scale * this + eps * other.
    */
   void scaleAndAddScaled(float scale, float eps, Kernel const& other);
-  void operator+=(Kernel const& other);
+  void operator-=(Kernel const& other);
   void operator/=(float v);
 };
 

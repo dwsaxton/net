@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include <iostream>
+
 inline void reorder(int d[], int stack_coordinate) {
   swap(d[0], d[stack_coordinate]);
 }
@@ -86,7 +88,6 @@ void Cube::addScaledKernel(float mult, Cube const& kernel, int i, int j) {
 }
 
 void Cube::addScaledSubcube(float mult, Cube const& cube, int i, int j) {
-  // TODO I Don't think these coordinates are coorreect1!
   assert(cube.stackCoordinate() == stackCoordinate());
   assert(cube.d0_ == d0_);
   int s[3] = {0, i, j};
@@ -107,12 +108,12 @@ float Cube::operator()(int i, int j, int k) const {
   return data_[a[0]](a[1], a[2]);
 }
 
-void Cube::operator+=(Cube const& other) {
+void Cube::operator-=(Cube const& other) {
   assert(rows_ == other.rows_);
   assert(cols_ == other.cols_);
   assert(height_ == other.height_);
   for (int i = 0; i < height_; ++i) {
-    data_[i] += other.data_[i];
+    data_[i] -= other.data_[i];
   }
 }
 

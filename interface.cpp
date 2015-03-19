@@ -106,8 +106,8 @@ void Interface::updateImages() {
   }
 
   
-  Image image = worker_->sampleRandomTraining();
-  layers_[0]->setPixmap(QPixmap::fromImage(toQImage(image.original())));
+//   Image image = worker_->sampleRandomTraining();
+//   layers_[0]->setPixmap(QPixmap::fromImage(toQImage(image.original())));
 //   worker_->net_->forwardPass(image.original());
 //   
 //   int layers[3] = {2, 4, 5};
@@ -138,10 +138,11 @@ void Interface::updateImages() {
   
   
 //   for (int i = 0; i < 15; ++i) {
+//     Cube const& kernel = worker_->net_->layers_[1].kernels[i].cube;
 //     QImage image(28, 28, QImage::Format_RGB32);
 //     for (int j = 0; j < 28; ++j) {
 //       for (int k = 0; k < 28; ++k) {
-//         double value = worker_->net_->layers_[1].boxes[i].weights.mask[0](j, k);
+//         double value = kernel(0, j, k);
 //         if (value < -1) {
 //           value = -1;
 //         } else if (value > 1) {

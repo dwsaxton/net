@@ -47,7 +47,7 @@ ConvNet::ConvNet(vector<LayerParams> const& params) {
       assert(type == LayerParams::Initial);
       assert(params[i].features == 1);
     } else if (type == LayerParams::Convolution) {
-      assert(params[i].kernel % 2 == 1);
+//       assert(params[i].kernel % 2 == 1);
 //       int mid = (params[i].kernel - 1) / 2;
 //       assert(params[i].edge == params[i - 1].edge - 2 * mid);
     } else {
@@ -71,6 +71,10 @@ void softMax(Cube const& input, Cube &output) {
   // to avoid float-overflow
   float max_value = input_data.maxCoeff();
   
+//   if (max_value < 1) {
+//     max_value = 1;
+//   }
+  
   output_data = (input_data.array() - max_value).exp().matrix();
   output_data /= output_data.sum();
 }
@@ -93,8 +97,6 @@ void convolution(Cube const& input, vector<Kernel> const& kernels, int stride, C
   assert(output.d0() == output_features);
   int edge = kernels[0].cube.d1();
   assert(edge == kernels[0].cube.d2()); // only support square kernels
-  assert(edge % 2 == 1); // only support odd-sized kernels
-  int mid = (edge - 1) / 2;
   assert(kernels[0].cube.d0() == input.d0());
   
   assert(input.d1() == input.d2()); // only support square inputs
@@ -115,7 +117,7 @@ void convolution(Cube const& input, vector<Kernel> const& kernels, int stride, C
   }
 }
 
-void convolutionBack(Cube const& output_value, Cube const& output_deriv, int stride, Cube const& input_value, Cube & input_deriv, vector<Kernel const& kernels, vector<Kernel> & kernels_deriv) {
+void convolutionBack(Cube const& output_value, Cube const& output_deriv, int stride, Cube const& input_value, Cube & input_deriv, vector<Kernel> const& kernels, vector<Kernel> & kernels_deriv) {
   int output_features = kernels_deriv.size();
   assert(output_features == output_value.d0());
   
@@ -188,7 +190,9 @@ void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
   
   Layer & top_layer = layers_[layer_count_ - 1];
   for (int i = 0; i < target.size(); ++i) {
-    top_layer.value_deriv(i, 0, 0) = top_layer.value(i, 0, 0) - target(i);
+    float v = top_layer.value(i, 0, 0);
+    float t = target[i];
+    top_layer.value_deriv(i, 0, 0) = v - t;
   }
     
   for (int layer = layer_count_ - 1; layer >= 1; --layer) {
@@ -234,26 +238,32 @@ void Layer::randomizeKernels() {
 }
 
 void Layer::update(float momentum_decay, float eps) {
-  float norm2 = 0;
-  int count = 0;
   for (int i = 0; i < kernels.size(); ++i) {
     kernels_momentum[i].scaleAndAddScaled(momentum_decay, eps, kernels_deriv[i]);
-    kernels[i] += kernels_momentum[i];
-    norm2 += kernels[i].bias * kernels[i].bias + kernels[i].cube.squaredNorm();
-    count += 1 + kernels[i].cube.d0() * kernels[i].cube.d1() * kernels[i].cube.d2();
-  }
-
-  // TODO this norm division is weird. Makes the kernels very small?
-  
-  float norm = sqrt(norm2 / count / 4);
-
-  if (norm < 1) {
-    norm = 1;
-  }
-  
-  for (int i = 0; i < kernels.size(); ++i) {
+    kernels[i] -= kernels_momentum[i];
+    
+    int count = 1 + kernels[i].cube.d0() * kernels[i].cube.d1() * kernels[i].cube.d2();
+    float norm2 = kernels[i].bias * kernels[i].bias + kernels[i].cube.squaredNorm();
+    
+    float norm = sqrt(norm2);
+    if (norm > 100 * count) {
+      norm = 100 * count;
+    }
+    
     kernels[i] /= norm;
   }
+
+//   // TODO this norm division is weird. Makes the kernels very small?
+//   
+//   float norm = sqrt(norm2 / 1000);
+// 
+//   if (norm > 1000 * count) {
+//     norm = 1000 * count;
+//   }
+//   
+//   for (int i = 0; i < kernels.size(); ++i) {
+//     kernels[i] /= norm;
+//   }
 }
 
 
@@ -266,9 +276,9 @@ void Kernel::scaleAndAddScaled(float scale, float eps, Kernel const& other) {
   }
 }
 
-void Kernel::operator+=(Kernel const& other) {
-  bias += other.bias;
-  cube += other.cube;
+void Kernel::operator-=(Kernel const& other) {
+  bias -= other.bias;
+  cube -= other.cube;
 }
 
 void Kernel::operator/=(float v) {
@@ -284,11 +294,13 @@ void TestSoftMax() {
 }
 
 void TestConvolution() {
-  Cube kernel(2, 1, 1);
-  kernel(0, 0, 0) = 5;
-  kernel(1, 0, 0) = 7;
+  Kernel kernel;
+  kernel.cube = Cube(2, 1, 1);
+  kernel.cube(0, 0, 0) = 5;
+  kernel.cube(1, 0, 0) = 7;
+  kernel.bias = 1;
   
-  Cube cube(2, 3, 3, kernel.stackCoordinate());
+  Cube cube(2, 3, 3, kernel.cube.stackCoordinate());
   
   cube(0, 0, 0) = 0;
   cube(0, 0, 1) = 1;
@@ -309,40 +321,48 @@ void TestConvolution() {
   
   convolution(cube, kernels, stride, output);
   
-  assert(output(0, 0, 0) == 0);
-  assert(output(0, 0, 1) == leak * -7 * 5);
-  assert(output(0, 1, 0) == 19 * 5);
-  assert(output(0, 1, 1) == leak * 25);
+  assert(output(0, 0, 0) == 1);
+  assert(output(0, 0, 1) == leak * (-7 * 5 + 1));
+  assert(output(0, 1, 0) == 19 * 5 + 1);
+  assert(output(0, 1, 1) == leak * (-25 + 1));
 }
 
 void TestConvolutionBack() {
-//   Cube output_value(1, 2, 2);
-//   Cube output_deriv(1, 2, 2);
-//   int stride = 1;
-//   Cube input_value(1, 2, 2);
-//   Cube input_deriv(1, 2, 2);
-//   Cube kernel(1, 1, 1);
-//   kernel(0, 0, 0) = 1;
-//   vector<Kernel> kernels = {kernel};
-//   
-//   Cube kernel_deriv(1, 1, 1);
-//   vector<Kernel> kernels_deriv = {kernel_deriv};
-//   
-//   output_value(0, 0, 0) = 3;
-//   output_value(0, 0, 1) = 7;
-//   output_value(0, 1, 0) = -5;
-//   output_value(0, 1, 1) = 2;
-//   output_deriv(0, 0, 0) = 10;
-//   output_deriv(0, 0, 1) = 20;
-//   output_deriv(0, 1, 0) = -40;
-//   output_deriv(0, 1, 1) = -5;
-//   
-//   input_value(0, 0, 0) = 0;
-//   input_value(0, 0, 1) = 1;
-//   input_value(0, 1, 0) = 2;
-//   input_value(0, 1, 1) = 3;
-//   
-//   convolutionBack(output_value, output_deriv, stride, input_value, input_deriv, kernels, kernels_deriv);
+  Cube output_value(1, 2, 2);
+  Cube output_deriv(1, 2, 2);
+  int stride = 1;
+  Cube input_value(1, 2, 2);
+  Cube input_deriv(1, 2, 2);
+  Kernel kernel;
+  kernel.cube = Cube(1, 1, 1);
+  kernel.cube(0, 0, 0) = 2;
+  kernel.bias = 3;
+  vector<Kernel> kernels = {kernel};
+  
+  vector<Kernel> kernels_deriv(1);
+  Kernel &kernel_deriv = kernels_deriv[0];
+  kernel_deriv.cube = Cube(1, 1, 1);
+  
+  output_value(0, 0, 0) = 3;
+  output_value(0, 0, 1) = 7;
+  output_value(0, 1, 0) = -5;
+  output_value(0, 1, 1) = 2;
+  output_deriv(0, 0, 0) = 10;
+  output_deriv(0, 0, 1) = 20;
+  output_deriv(0, 1, 0) = -40;
+  output_deriv(0, 1, 1) = -5;
+  
+  input_value(0, 0, 0) = 0;
+  input_value(0, 0, 1) = 1;
+  input_value(0, 1, 0) = 2;
+  input_value(0, 1, 1) = 3;
+  
+  convolutionBack(output_value, output_deriv, stride, input_value, input_deriv, kernels, kernels_deriv);
+  
+  assert(abs(kernel_deriv.cube(0,0,0) - (20 - 15 - 2 * 40 * leak)) < 0.00001);
+  assert(abs(kernel_deriv.bias - (10 + 20 - 40 * leak - 5)) < 0.00001);
+  assert(input_deriv(0, 0, 0) == 20);
+  assert(abs(input_deriv(0, 1, 0) + leak * 80) < 0.0001);
 }
 
 void TestConvNet() {

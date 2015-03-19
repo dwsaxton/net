@@ -82,12 +82,17 @@ void Worker::process() {
 //   layer2.features= 10;
 //   layer2.edge = 1;
 //   
-//   vector<LayerParams> params = {layer0, layer1, layer2};
+//   LayerParams layer3;
+//   layer3.connection_type = LayerParams::SoftMax;
+//   layer3.features= 10;
+//   layer3.edge = 1;
+//   
+//   vector<LayerParams> params = {layer0, layer1, layer2, layer3};
   
   net_ = new ConvNet(params);
   mnist_.init();
   
-  float learning_rate = 0.0005;
+  float learning_rate = 0.002;
 
   bool trailing_correct[1000] = {false};
   int trailing_at = 0;
