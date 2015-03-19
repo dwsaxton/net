@@ -68,18 +68,19 @@ void Worker::process() {
   
 //   LayerParams layer0;
 //   layer0.connection_type = LayerParams::Initial;
-//   layer0.box_count = 1;
-//   layer0.box_edge = 28;
+//   layer0.features = 1;
+//   layer0.edge = 28;
 //   
 //   LayerParams layer1;
-//   layer1.connection_type = LayerParams::Full;
-//   layer1.box_count = 15;
-//   layer1.box_edge = 1;
+//   layer1.connection_type = LayerParams::Convolution;
+//   layer1.features = 15;
+//   layer1.edge = 1;
+//   layer1.kernel = 28;
 //   
 //   LayerParams layer2;
-//   layer2.connection_type = LayerParams::Full;
-//   layer2.box_count = 10;
-//   layer2.box_edge = 1;
+//   layer2.connection_type = LayerParams::Convolution;
+//   layer2.features= 10;
+//   layer2.edge = 1;
 //   
 //   vector<LayerParams> params = {layer0, layer1, layer2};
   

@@ -242,11 +242,13 @@ void Layer::update(float momentum_decay, float eps) {
     norm2 += kernels[i].bias * kernels[i].bias + kernels[i].cube.squaredNorm();
     count += 1 + kernels[i].cube.d0() * kernels[i].cube.d1() * kernels[i].cube.d2();
   }
+
+  // TODO this norm division is weird. Makes the kernels very small?
   
   float norm = sqrt(norm2);
 
-  if (norm > 100 * count) {
-    norm = 100 * count;
+  if (norm > 10 * count) {
+    norm = 10 * count;
   }
   
   for (int i = 0; i < kernels.size(); ++i) {
@@ -259,7 +261,8 @@ void Kernel::scaleAndAddScaled(float scale, float eps, Kernel const& other) {
   assert(cube.height() == other.cube.height());
   bias = scale * bias + eps * other.bias;
   for (int i = 0; i < cube.height(); ++i) {
-    cube.layer(i) = scale * cube.layer(i) + eps * other.cube.layer(i);
+    cube.layer(i) *= scale;
+    cube.layer(i) += eps * other.cube.layer(i);
   }
 }
 

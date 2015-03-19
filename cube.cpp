@@ -79,7 +79,7 @@ void Cube::addScaledKernel(float mult, Cube const& kernel, int i, int j) {
   reorder(s);
   
   for (int a = 0; a < kernel.height_; ++a) {
-    data_[a + s[0]].block(s[1], s[2], kernel.rows_, kernel.cols_) += kernel.data_[a];
+    data_[a + s[0]].block(s[1], s[2], kernel.rows_, kernel.cols_) += mult * kernel.data_[a];
   }
 }
 
