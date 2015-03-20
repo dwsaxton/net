@@ -238,32 +238,28 @@ void Layer::randomizeKernels() {
 }
 
 void Layer::update(float momentum_decay, float eps) {
+  int count = 0;
+  float norm2 = 0;
+  
   for (int i = 0; i < kernels.size(); ++i) {
     kernels_momentum[i].scaleAndAddScaled(momentum_decay, eps, kernels_deriv[i]);
     kernels[i] -= kernels_momentum[i];
     
-    int count = 1 + kernels[i].cube.d0() * kernels[i].cube.d1() * kernels[i].cube.d2();
-    float norm2 = kernels[i].bias * kernels[i].bias + kernels[i].cube.squaredNorm();
-    
-    float norm = sqrt(norm2);
-    if (norm > 100 * count) {
-      norm = 100 * count;
-    }
-    
+    count += 1 + kernels[i].cube.d0() * kernels[i].cube.d1() * kernels[i].cube.d2();
+    norm2 += kernels[i].bias * kernels[i].bias + kernels[i].cube.squaredNorm();
+  }
+  
+  count /= kernels.size();
+  norm2 /= kernels.size();
+  
+  float norm = sqrt(norm2);
+  if (norm > 100 * count) {
+    norm = 100 * count;
+  }
+  
+  for (int i = 0; i < kernels.size(); ++i) {
     kernels[i] /= norm;
   }
-
-//   // TODO this norm division is weird. Makes the kernels very small?
-//   
-//   float norm = sqrt(norm2 / 1000);
-// 
-//   if (norm > 1000 * count) {
-//     norm = 1000 * count;
-//   }
-//   
-//   for (int i = 0; i < kernels.size(); ++i) {
-//     kernels[i] /= norm;
-//   }
 }
 
 
