@@ -60,9 +60,14 @@ void Worker::process() {
   layer4.edge = 1;
   
   LayerParams layer5;
-  layer5.connection_type = LayerParams::SoftMax;
+  layer5.connection_Type = LayerParams::Scale;
   layer5.features = 10;
   layer5.edge = 1;
+  
+//   LayerParams layer5;
+//   layer5.connection_type = LayerParams::SoftMax;
+//   layer5.features = 10;
+//   layer5.edge = 1;
   
   vector<LayerParams> params = {layer0, layer1, layer2, layer3, layer4, layer5};
   

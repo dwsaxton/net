@@ -52,6 +52,9 @@ ConvNet::ConvNet(vector<LayerParams> const& params) {
 //       assert(params[i].kernel % 2 == 1);
 //       int mid = (params[i].kernel - 1) / 2;
 //       assert(params[i].edge == params[i - 1].edge - 2 * mid);
+    } else if (type == LayerParams::Scale) {
+      assert(params[i].edge == params[i - 1].edge);
+      assert(params[i].features == params[i - 1].features);
     } else {
       assert(type == LayerParams::SoftMax);
       assert(params[i].features == params[i - 1].features);
@@ -82,6 +85,26 @@ void softMaxBack(Cube const& output_cube_value, Cube const& output_cube_deriv, C
   MatrixXf const& output_deriv = output_cube_deriv.layer(0);
   MatrixXf & input_deriv = input_cube_deriv.layer(0);
   input_deriv = -output_value.cwiseProduct(output_deriv).sum() * output_value + output_value.cwiseProduct(output_deriv);
+}
+
+float getScaleFactor(Cube const& values) {
+  float factor = max(values.maxCoeff(), -values.minCoeff());
+  if (factor < 1e-6) {
+    factor = 1e-6;
+  }
+  return factor;
+}
+
+void scale(Cube const& input_cube, Cube &output_cube) {
+  output_cube = input_cube;
+  output_cube /= getScaleFactor(input_cube);
+}
+
+void scaleBack(Cube const& output_cube_deriv, Cube const& input_cube_value, const& input_cube_deriv) {
+  float factor = getScaleFactor(input_cube_value);
+  input_cube_deriv = output_cube_deriv;
+  input_cube_deriv /= factor;
+  // TODO finish writing this. Need proper dependence for the derivative value at the max coeff
 }
 
 const float leak = 0.0001;
@@ -165,6 +188,9 @@ void ConvNet::forwardPass(MatrixXf const& input_data) {
       case LayerParams::Initial:
         // already handled
         continue;
+      case LayerParams::Scale:
+        scale(input.value, output.value);
+        continue;
       case LayerParams::SoftMax:
         softMax(input.value, output.value);
         continue;
@@ -200,6 +226,9 @@ void ConvNet::backwardsPass(VectorXf const& target) {
     switch (params_[layer].connection_type) {
       case LayerParams::Initial:
         assert(false); // should only be initial layer for layer = 0
+        continue;
+      case LayerParams::Scale:
+        scaleBack(output.value_deriv, input.value, input.value_deriv);
         continue;
       case LayerParams::SoftMax:
         softMaxBack(output.value, output.value_deriv, input.value_deriv);
@@ -245,34 +274,33 @@ void Layer::setupAdagrad(float initial) {
 }
 
 void Layer::update(float momentum_decay, float eps) {
-  int count = 0;
-  float norm2 = 0;
+//   int count = 0;
+//   float norm2 = 0;
   
   for (int i = 0; i < kernels.size(); ++i) {
     kernels_deriv[i].scaleAndDivideByCwiseSqrt(eps, kernels_adagrad[i]);
-    kernels_adagrad[i].addCwiseSquare(kernels_deriv[i]);
-    kernels[i] += kernels_deriv[i];
+//     kernels_adagrad[i].addCwiseSquare(kernels_deriv[i]);
+//     kernels[i] -= kernels_deriv[i];
     
 //     kernels_momentum[i].scaleAndAddScaled(momentum_decay, eps, kernels_deriv[i]);
 //     kernels[i] -= kernels_momentum[i];
-//     kernels[i].addScaled(-eps, kernels_deriv[i]);
-//     kernels[i] -= eps * kernels_deriv[i];
+    kernels[i].addScaled(-eps, kernels_deriv[i]);
     
-    count += 1 + kernels[i].cube.d0() * kernels[i].cube.d1() * kernels[i].cube.d2();
-    norm2 += kernels[i].bias * kernels[i].bias + kernels[i].cube.squaredNorm();
+//     count += 1 + kernels[i].cube.d0() * kernels[i].cube.d1() * kernels[i].cube.d2();
+//     norm2 += kernels[i].bias * kernels[i].bias + kernels[i].cube.squaredNorm();
   }
   
-  count /= kernels.size();
-  norm2 /= kernels.size();
+//   count /= kernels.size();
+//   norm2 /= kernels.size();
   
-  float norm = sqrt(norm2);
-  if (norm > 100 * count) {
-    norm = 100 * count;
-  }
+//   float norm = sqrt(norm2);
+//   if (norm > 100 * count) {
+//     norm = 100 * count;
+//   }
   
-  for (int i = 0; i < kernels.size(); ++i) {
-    kernels[i] /= norm;
-  }
+//   for (int i = 0; i < kernels.size(); ++i) {
+//     kernels[i] /= norm;
+//   }
 }
 
 

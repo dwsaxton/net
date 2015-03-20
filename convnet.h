@@ -31,6 +31,7 @@ public:
   enum ConnectionType {
     Initial,
     Convolution,
+    Scale,
     SoftMax
   };
   
@@ -80,14 +81,14 @@ class Layer {
 public:
   int features() const { return kernels.size(); }
   void randomizeKernels();
-  void setupAdagrad(float initial);
+//   void setupAdagrad(float initial);
   void update(float momentum_decay, float eps);
   
   Cube value;
   Cube value_deriv;
   vector<Kernel> kernels;
   vector<Kernel> kernels_deriv;
-  vector<Kernel> kernels_adagrad;
+//   vector<Kernel> kernels_adagrad;
 //   vector<Kernel> kernels_momentum;
 };
 
