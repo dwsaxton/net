@@ -36,6 +36,7 @@ public:
   
   float & operator()(int i, int j, int k);
   float operator()(int i, int j, int k) const;
+  void operator+=(Cube const& other);
   void operator-=(Cube const& other);
   void operator/=(float v);
   

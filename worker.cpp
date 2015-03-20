@@ -92,48 +92,37 @@ void Worker::process() {
   net_ = new ConvNet(params);
   mnist_.init();
   
-  float learning_rate = 0.002;
-
   bool trailing_correct[1000] = {false};
   int trailing_at = 0;
   int trailing_count = 0;
+  int done = 0;
   
-  for (int epoch = 0; ; ++epoch) {
-    for (int i = 0; i < mnist_.trainingCount(); ++i) {
-      RandomTransform transform(10, 0.15, 2.5);
-      Image image = sampleRandomTraining();
-      VectorXf target(10);
-      target.setZero();
-      target[image.digit()] = 1;
-      net_->forwardPass(image.generate(transform));
-      net_->backwardsPass(target, learning_rate);
-      
-      bool correct = isCorrect(net_->getOutput(), image.digit());
-      if (trailing_correct[trailing_at]) {
-        trailing_count --;
-      }
-      trailing_correct[trailing_at] = correct;
-      if (correct) {
-        trailing_count++;
-      }
-      trailing_at = (trailing_at + 1) % 1000;
-      
-      if (i % 5000 == 0) {
-        cout << "a=" << net_->getOutput().transpose() << " digit=" << image.digit() << endl;
-        cout << "trailing=" << (trailing_count / 10.0) << "%" << endl;
-//         cout << "2=" << net_->get2ndOutput().transpose() << " digit=" << image.digit << endl;
-        test();
-        emit this->dataReady();
-      }
-    }
+  while (true) {
+    RandomTransform transform(10, 0.15, 2.5);
+    Image image = sampleRandomTraining();
+    VectorXf target(10);
+    target.setZero();
+    target[image.digit()] = 1;
+    net_->forwardPass(image.generate(transform));
+    net_->backwardsPass(target);
     
-    if ((epoch + 1) % 2 == 0) {
-      learning_rate *= 0.5;
-      if (learning_rate < 0.000001) {
-        learning_rate = 0.000001;
-      }
+    bool correct = isCorrect(net_->getOutput(), image.digit());
+    if (trailing_correct[trailing_at]) {
+      trailing_count --;
     }
-    cout << " epoch finished, new learning rate " << learning_rate << endl;
+    trailing_correct[trailing_at] = correct;
+    if (correct) {
+      trailing_count++;
+    }
+    trailing_at = (trailing_at + 1) % 1000;
+    
+    if (done++ % 5000 == 0) {
+      cout << "a=" << net_->getOutput().transpose() << " digit=" << image.digit() << endl;
+      cout << "trailing=" << (trailing_count / 10.0) << "%" << endl;
+//         cout << "2=" << net_->get2ndOutput().transpose() << " digit=" << image.digit << endl;
+      test();
+      emit dataReady();
+    }
   }
 }
 

@@ -117,6 +117,15 @@ void Cube::operator-=(Cube const& other) {
   }
 }
 
+void Cube::operator+=(Cube const& other) {
+  assert(rows_ == other.rows_);
+  assert(cols_ == other.cols_);
+  assert(height_ == other.height_);
+  for (int i = 0; i < height_; ++i) {
+    data_[i] += other.data_[i];
+  }
+}
+
 void Cube::operator/=(float v) {
   for (int i = 0; i < height_; ++i) {
     data_[i] /= v;

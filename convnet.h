@@ -15,7 +15,7 @@ public:
   ConvNet(vector<LayerParams> const& params);
   
   void forwardPass(MatrixXf const& input);
-  void backwardsPass(const VectorXf& target, float learning_rate);
+  void backwardsPass(const VectorXf& target);
   VectorXf getOutput() const;
   
 // private:
@@ -68,6 +68,10 @@ public:
    * Replaces this with scale * this + eps * other.
    */
   void scaleAndAddScaled(float scale, float eps, Kernel const& other);
+  void addScaled(float eps, Kernel const& other);
+  void scaleAndDivideByCwiseSqrt(float scale, Kernel const& other);
+  void addCwiseSquare(Kernel const& other);
+  void operator+=(Kernel const& other);
   void operator-=(Kernel const& other);
   void operator/=(float v);
 };
@@ -76,13 +80,15 @@ class Layer {
 public:
   int features() const { return kernels.size(); }
   void randomizeKernels();
+  void setupAdagrad(float initial);
   void update(float momentum_decay, float eps);
   
   Cube value;
   Cube value_deriv;
   vector<Kernel> kernels;
   vector<Kernel> kernels_deriv;
-  vector<Kernel> kernels_momentum;
+  vector<Kernel> kernels_adagrad;
+//   vector<Kernel> kernels_momentum;
 };
 
 #endif

@@ -37,10 +37,12 @@ ConvNet::ConvNet(vector<LayerParams> const& params) {
         layers_[i].kernels[j].setZero();
       }
       layers_[i].kernels_deriv = layers_[i].kernels;
-      layers_[i].kernels_momentum = layers_[i].kernels;
+      layers_[i].kernels_adagrad = layers_[i].kernels;
+//       layers_[i].kernels_momentum = layers_[i].kernels;
     }
     
     layers_[i].randomizeKernels();
+    layers_[i].setupAdagrad(1);
     
     // And do some sanity checking
     if (i == 0) {
@@ -70,10 +72,6 @@ void softMax(Cube const& input, Cube &output) {
   // use max_value to divide the top and bottom of the fraction in SoftMax by exp(max_value),
   // to avoid float-overflow
   float max_value = input_data.maxCoeff();
-  
-//   if (max_value < 1) {
-//     max_value = 1;
-//   }
   
   output_data = (input_data.array() - max_value).exp().matrix();
   output_data /= output_data.sum();
@@ -178,7 +176,7 @@ void ConvNet::forwardPass(MatrixXf const& input_data) {
   }
 }
 
-void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
+void ConvNet::backwardsPass(VectorXf const& target) {
   // already checked earlier, but do it here too to indicate where it gets used
   assert(params_[layer_count_ - 1].edge == 1);
   
@@ -215,7 +213,7 @@ void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
   
   for (int layer = 1; layer < layer_count_; ++layer) {
     if (params_[layer].connection_type != LayerParams::SoftMax) {
-      layers_[layer].update(MOMENTUM, learning_rate);
+      layers_[layer].update(MOMENTUM, 0.01);
     }
   }
 }
@@ -237,13 +235,28 @@ void Layer::randomizeKernels() {
   }
 }
 
+void Layer::setupAdagrad(float initial) {
+  for (int i = 0; i < kernels_adagrad.size(); ++i) {
+    kernels_adagrad[i].bias = initial;
+    for (int j = 0; j < kernels_adagrad[i].cube.height(); ++j) {
+      kernels_adagrad[i].cube.layer(j).setConstant(initial);
+    }
+  }
+}
+
 void Layer::update(float momentum_decay, float eps) {
   int count = 0;
   float norm2 = 0;
   
   for (int i = 0; i < kernels.size(); ++i) {
-    kernels_momentum[i].scaleAndAddScaled(momentum_decay, eps, kernels_deriv[i]);
-    kernels[i] -= kernels_momentum[i];
+    kernels_deriv[i].scaleAndDivideByCwiseSqrt(eps, kernels_adagrad[i]);
+    kernels_adagrad[i].addCwiseSquare(kernels_deriv[i]);
+    kernels[i] += kernels_deriv[i];
+    
+//     kernels_momentum[i].scaleAndAddScaled(momentum_decay, eps, kernels_deriv[i]);
+//     kernels[i] -= kernels_momentum[i];
+//     kernels[i].addScaled(-eps, kernels_deriv[i]);
+//     kernels[i] -= eps * kernels_deriv[i];
     
     count += 1 + kernels[i].cube.d0() * kernels[i].cube.d1() * kernels[i].cube.d2();
     norm2 += kernels[i].bias * kernels[i].bias + kernels[i].cube.squaredNorm();
@@ -270,6 +283,34 @@ void Kernel::scaleAndAddScaled(float scale, float eps, Kernel const& other) {
     cube.layer(i) *= scale;
     cube.layer(i) += eps * other.cube.layer(i);
   }
+}
+
+void Kernel::addScaled(float eps, Kernel const& other) {
+  assert(cube.height() == other.cube.height());
+  bias += eps * other.bias;
+  for (int i = 0; i < cube.height(); ++i) {
+    cube.layer(i) += eps * other.cube.layer(i);
+  }
+}
+
+void Kernel::scaleAndDivideByCwiseSqrt(float scale, Kernel const& other) {
+  bias = (scale * bias) / sqrt(other.bias);
+  for (int i = 0; i < cube.height(); ++i) {
+    cube.layer(i) *= scale;
+    cube.layer(i).array() /= other.cube.layer(i).array().sqrt();
+  }
+}
+
+void Kernel::addCwiseSquare(Kernel const& other) {
+  bias += other.bias * other.bias;
+  for (int i = 0; i < cube.height(); ++i) {
+    cube.layer(i).array() += other.cube.layer(i).array().square();
+  }
+}
+
+void Kernel::operator+=(Kernel const& other) {
+  bias += other.bias;
+  cube += other.cube;
 }
 
 void Kernel::operator-=(Kernel const& other) {
