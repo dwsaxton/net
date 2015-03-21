@@ -21,6 +21,8 @@ private slots:
   void updateImages();
 
 private:
+  void showDeepFirstLayer();
+  void showFailingSample();
   void showRandomTransformed();
   
   Worker *worker_;

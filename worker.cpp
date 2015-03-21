@@ -60,16 +60,16 @@ void Worker::process() {
   layer4.edge = 1;
   
   LayerParams layer5;
-  layer5.connection_Type = LayerParams::Scale;
+  layer5.connection_type = LayerParams::Scale;
   layer5.features = 10;
   layer5.edge = 1;
   
-//   LayerParams layer5;
-//   layer5.connection_type = LayerParams::SoftMax;
-//   layer5.features = 10;
-//   layer5.edge = 1;
+  LayerParams layer6;
+  layer6.connection_type = LayerParams::SoftMax;
+  layer6.features = 10;
+  layer6.edge = 1;
   
-  vector<LayerParams> params = {layer0, layer1, layer2, layer3, layer4, layer5};
+  vector<LayerParams> params = {layer0, layer1, layer2, layer3, layer4, layer5, layer6};
   
 //   LayerParams layer0;
 //   layer0.connection_type = LayerParams::Initial;
@@ -88,11 +88,16 @@ void Worker::process() {
 //   layer2.edge = 1;
 //   
 //   LayerParams layer3;
-//   layer3.connection_type = LayerParams::SoftMax;
+//   layer3.connection_type = LayerParams::Scale;
 //   layer3.features= 10;
 //   layer3.edge = 1;
 //   
-//   vector<LayerParams> params = {layer0, layer1, layer2, layer3};
+//   LayerParams layer4;
+//   layer4.connection_type = LayerParams::SoftMax;
+//   layer4.features= 10;
+//   layer4.edge = 1;
+//   
+//   vector<LayerParams> params = {layer0, layer1, layer2, layer3, layer4};
   
   net_ = new ConvNet(params);
   mnist_.init();
@@ -122,9 +127,9 @@ void Worker::process() {
     trailing_at = (trailing_at + 1) % 1000;
     
     if (done++ % 5000 == 0) {
-      cout << "a=" << net_->getOutput().transpose() << " digit=" << image.digit() << endl;
+      cout << "l[3]=" << net_->getOutput().transpose() << " digit=" << image.digit() << endl;
+      cout << "l[2]=" << net_->getOutput2().transpose() << " digit=" << image.digit() << endl;
       cout << "trailing=" << (trailing_count / 10.0) << "%" << endl;
-//         cout << "2=" << net_->get2ndOutput().transpose() << " digit=" << image.digit << endl;
       test();
       emit dataReady();
     }

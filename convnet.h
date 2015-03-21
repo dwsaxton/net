@@ -17,13 +17,13 @@ public:
   void forwardPass(MatrixXf const& input);
   void backwardsPass(const VectorXf& target);
   VectorXf getOutput() const;
+  VectorXf getOutput2() const;
   
-// private:
-  void updateWeights();
-  
-  vector<LayerParams> params_;
   vector<Layer> layers_;
-  int layer_count_;
+  
+private:
+  vector<LayerParams> params_;
+  void rescale();
 };
 
 class LayerParams {
@@ -81,14 +81,14 @@ class Layer {
 public:
   int features() const { return kernels.size(); }
   void randomizeKernels();
-//   void setupAdagrad(float initial);
+  void setupAdagrad(float initial);
   void update(float momentum_decay, float eps);
   
   Cube value;
   Cube value_deriv;
   vector<Kernel> kernels;
   vector<Kernel> kernels_deriv;
-//   vector<Kernel> kernels_adagrad;
+  vector<Kernel> kernels_adagrad;
 //   vector<Kernel> kernels_momentum;
 };
 

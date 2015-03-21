@@ -83,27 +83,32 @@ void Interface::showRandomTransformed() {
   }
 }
 
-void Interface::updateImages() {
+void Interface::showDeepFirstLayer() {
+  Layer const& layer = worker_->net_->layers_[1];
+  float mn = HUGE_VAL;
+  float mx = -HUGE_VAL;
+  
   for (int i = 0; i < 5; ++i) {
-    QImage image(5, 5, QImage::Format_RGB32);
-    for (int x = 0; x < 5; ++x) {
-      for (int y = 0; y < 5; ++y) {
-        double value = worker_->net_->layers_[1].kernels[i].cube(0, x, y);
-        if (value < -1) {
-          value = -1;
-        } else if (value > 1) {
-          value = 1;
-        }
-        unsigned char grey = (1 - value) * 127;
-        image.setPixel(x, y, QColor(grey, grey, grey).rgb());
-      }
-    }
+    mn = min(mn, layer.kernels[i].cube.minCoeff());
+    mx = max(mx, layer.kernels[i].cube.maxCoeff());
+  }
+  
+  for (int i = 0; i < 5; ++i) {
+    QImage image = toQImage(layer.kernels[i].cube.layer(0), mn, mx);
     images_[i]->setPixmap(QPixmap::fromImage(image.scaled(100, 100)));
   }
+}
+
+void Interface::showFailingSample() {
   for (int i = 0; i < 10; ++i) {
     QImage image = toQImage(worker_->failing[i].original());
     images_[i+5]->setPixmap(QPixmap::fromImage(image));
   }
+}
+
+void Interface::updateImages() {
+  showDeepFirstLayer();
+  showFailingSample();
 
   
 //   Image image = worker_->sampleRandomTraining();

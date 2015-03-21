@@ -22,10 +22,6 @@ void Mnist::init() {
 
   initImages(training_labels, training_pixels, TRAINING_COUNT, training_);
   initImages(test_labels, test_pixels, TEST_COUNT, test_);
-
-  for (int i = 0; i < 10; ++i) {
-    print(training_[i]);
-  }
 }
 
 void Mnist::initImages(ifstream & labels, ifstream & pixels, int count, vector<Image> &images) {

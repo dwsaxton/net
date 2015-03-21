@@ -11,14 +11,12 @@ ConvNet::ConvNet() {
 }
 
 ConvNet::ConvNet(vector<LayerParams> const& params) {
-  layer_count_ = params.size();
-  assert(layer_count_ >= 1);
-  
+  assert(params.size() >= 1);
   params_ = params;
-  layers_.resize(layer_count_);
+  layers_.resize(params.size());
   
-  for (int i = layer_count_ - 1; i >= 0; --i) {
-    if (i < layer_count_ - 1 && layers_[i + 1].kernels.size() > 0) {
+  for (int i = layers_.size() - 1; i >= 0; --i) {
+    if (i < layers_.size() - 1 && layers_[i + 1].kernels.size() > 0) {
       int upper_kernel_direction = layers_[i + 1].kernels[0].cube.stackCoordinate();
       layers_[i].value = Cube(params[i].features, params[i].edge, params[i].edge, upper_kernel_direction);
     } else {
@@ -88,11 +86,13 @@ void softMaxBack(Cube const& output_cube_value, Cube const& output_cube_deriv, C
 }
 
 float getScaleFactor(Cube const& values) {
-  float factor = max(values.maxCoeff(), -values.minCoeff());
-  if (factor < 1e-6) {
-    factor = 1e-6;
+  float mx = values.maxCoeff();
+  float min = values.minCoeff();
+  float factor = max(mx, -min);
+  if (factor < 1) {
+    factor = 1;
   }
-  return factor;
+  return factor / 6;
 }
 
 void scale(Cube const& input_cube, Cube &output_cube) {
@@ -100,14 +100,47 @@ void scale(Cube const& input_cube, Cube &output_cube) {
   output_cube /= getScaleFactor(input_cube);
 }
 
-void scaleBack(Cube const& output_cube_deriv, Cube const& input_cube_value, const& input_cube_deriv) {
+void scaleBack(Cube const& output_cube_deriv, Cube const& input_cube_value, Cube & input_cube_deriv) {
   float factor = getScaleFactor(input_cube_value);
   input_cube_deriv = output_cube_deriv;
   input_cube_deriv /= factor;
-  // TODO finish writing this. Need proper dependence for the derivative value at the max coeff
+  
+  bool found = false;
+  int max_i = -1;
+  int max_j = -1;
+  int max_k = -1;
+  
+  for (int i = 0; i < input_cube_value.d0() && !found; ++i) {
+    for (int j = 0; j < input_cube_value.d1() && !found; ++j) {
+      for (int k = 0; k < input_cube_value.d2(); ++k) {
+        if (abs(input_cube_value(i, j, k)) / 6 == factor) {
+          max_i = i;
+          max_j = j;
+          max_k = k;
+          found = true;
+          break;
+        }
+      }
+    }
+  }
+  
+  if (!found) {
+    // the scale factor was probably capped, so couldn't be found;
+    // therefore since there's no element that bites, don't add this part
+    // of the derivative
+//     cout << "@Not found!" << endl;
+    return;
+  }
+  
+  float value = input_cube_value(max_i, max_j, max_j);
+  
+  // For now, only done single-height implementation
+  assert(input_cube_value.height() == 1); //
+  input_cube_deriv(max_i, max_j, max_k) -=
+      output_cube_deriv.layer(0).cwiseProduct(input_cube_value.layer(0)).sum() / value / factor;
 }
 
-const float leak = 0.0001;
+const float leak = 0.01;
 
 float relu(float x) {
   return x > 0 ? x : leak * x;
@@ -180,7 +213,7 @@ void ConvNet::forwardPass(MatrixXf const& input_data) {
     layers_[0].value.layer(0).block(offset_i, offset_j, input_data.rows(), input_data.cols()) = input_data;
   }
   
-  for (int layer = 1; layer < layer_count_; ++layer) {
+  for (int layer = 1; layer < layers_.size(); ++layer) {
     Layer const& input = layers_[layer - 1];
     Layer & output = layers_[layer];
     
@@ -204,22 +237,22 @@ void ConvNet::forwardPass(MatrixXf const& input_data) {
 
 void ConvNet::backwardsPass(VectorXf const& target) {
   // already checked earlier, but do it here too to indicate where it gets used
-  assert(params_[layer_count_ - 1].edge == 1);
+  assert(params_[layers_.size() - 1].edge == 1);
   
-  assert(params_[layer_count_ - 1].features == target.size());
+  assert(params_[layers_.size() - 1].features == target.size());
   
   // Initialize the first set of derivatives, using the error function
   // E = (1/2) \sum_{i = 1}^{N} (v[i] - target[i])^2
   // so {dE}/{dv[i]} = v[i] - target[i]
   
-  Layer & top_layer = layers_[layer_count_ - 1];
+  Layer & top_layer = layers_[layers_.size() - 1];
   for (int i = 0; i < target.size(); ++i) {
     float v = top_layer.value(i, 0, 0);
     float t = target[i];
     top_layer.value_deriv(i, 0, 0) = v - t;
   }
     
-  for (int layer = layer_count_ - 1; layer >= 1; --layer) {
+  for (int layer = layers_.size() - 1; layer >= 1; --layer) {
     Layer &input = layers_[layer - 1];
     Layer &output = layers_[layer];
     
@@ -240,15 +273,26 @@ void ConvNet::backwardsPass(VectorXf const& target) {
     }
   }
   
-  for (int layer = 1; layer < layer_count_; ++layer) {
-    if (params_[layer].connection_type != LayerParams::SoftMax) {
-      layers_[layer].update(MOMENTUM, 0.01);
+  for (int layer = 1; layer < layers_.size(); ++layer) {
+    if (params_[layer].connection_type != LayerParams::SoftMax
+        && params_[layer].connection_type != LayerParams::Scale) {
+      layers_[layer].update(MOMENTUM, 0.1);
     }
   }
 }
 
 VectorXf ConvNet::getOutput() const {
-  MatrixXf layer = layers_[layer_count_ - 1].value.layer(0);
+  MatrixXf layer = layers_[layers_.size() - 1].value.layer(0);
+  if (layer.cols() == 1) {
+    return layer.block(0, 0, layer.rows(), 1);
+  } else {
+    assert(layer.rows() == 1);
+    return layer.block(0, 0, 1, layer.cols());
+  }
+}
+
+VectorXf ConvNet::getOutput2() const {
+  MatrixXf layer = layers_[layers_.size() - 2].value.layer(0);
   if (layer.cols() == 1) {
     return layer.block(0, 0, layer.rows(), 1);
   } else {
@@ -274,29 +318,17 @@ void Layer::setupAdagrad(float initial) {
 }
 
 void Layer::update(float momentum_decay, float eps) {
-//   int count = 0;
-//   float norm2 = 0;
-  
   for (int i = 0; i < kernels.size(); ++i) {
     kernels_deriv[i].scaleAndDivideByCwiseSqrt(eps, kernels_adagrad[i]);
-//     kernels_adagrad[i].addCwiseSquare(kernels_deriv[i]);
-//     kernels[i] -= kernels_deriv[i];
+    kernels_adagrad[i].addCwiseSquare(kernels_deriv[i]);
+    kernels[i] -= kernels_deriv[i];
     
 //     kernels_momentum[i].scaleAndAddScaled(momentum_decay, eps, kernels_deriv[i]);
 //     kernels[i] -= kernels_momentum[i];
-    kernels[i].addScaled(-eps, kernels_deriv[i]);
     
-//     count += 1 + kernels[i].cube.d0() * kernels[i].cube.d1() * kernels[i].cube.d2();
-//     norm2 += kernels[i].bias * kernels[i].bias + kernels[i].cube.squaredNorm();
+//     kernels[i].addScaled(-eps, kernels_deriv[i]);
   }
   
-//   count /= kernels.size();
-//   norm2 /= kernels.size();
-  
-//   float norm = sqrt(norm2);
-//   if (norm > 100 * count) {
-//     norm = 100 * count;
-//   }
   
 //   for (int i = 0; i < kernels.size(); ++i) {
 //     kernels[i] /= norm;
