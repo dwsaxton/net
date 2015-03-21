@@ -83,17 +83,19 @@ void Interface::showRandomTransformed() {
   }
 }
 
-void Interface::showDeepFirstLayer() {
+void Interface::showFirstLayer() {
   Layer const& layer = worker_->net_->layers_[1];
   float mn = HUGE_VAL;
   float mx = -HUGE_VAL;
   
-  for (int i = 0; i < 5; ++i) {
+  int features = layer.kernels.size();
+  
+  for (int i = 0; i < features; ++i) {
     mn = min(mn, layer.kernels[i].cube.minCoeff());
     mx = max(mx, layer.kernels[i].cube.maxCoeff());
   }
   
-  for (int i = 0; i < 5; ++i) {
+  for (int i = 0; i < features; ++i) {
     QImage image = toQImage(layer.kernels[i].cube.layer(0), mn, mx);
     images_[i]->setPixmap(QPixmap::fromImage(image.scaled(100, 100)));
   }
@@ -107,7 +109,7 @@ void Interface::showFailingSample() {
 }
 
 void Interface::updateImages() {
-  showDeepFirstLayer();
+  showFirstLayer();
   showFailingSample();
 
   
@@ -142,21 +144,4 @@ void Interface::updateImages() {
   
   
   
-//   for (int i = 0; i < 15; ++i) {
-//     Cube const& kernel = worker_->net_->layers_[1].kernels[i].cube;
-//     QImage image(28, 28, QImage::Format_RGB32);
-//     for (int j = 0; j < 28; ++j) {
-//       for (int k = 0; k < 28; ++k) {
-//         double value = kernel(0, j, k);
-//         if (value < -1) {
-//           value = -1;
-//         } else if (value > 1) {
-//           value = 1;
-//         }
-//         unsigned char grey = (1 - value) * 127;
-//         image.setPixel(j, k, QColor(grey, grey, grey).rgb());
-//       }
-//     }
-//     images_[i]->setPixmap(QPixmap::fromImage(image));
-//   }
 }

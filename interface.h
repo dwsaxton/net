@@ -21,7 +21,7 @@ private slots:
   void updateImages();
 
 private:
-  void showDeepFirstLayer();
+  void showFirstLayer();
   void showFailingSample();
   void showRandomTransformed();
   

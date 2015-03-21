@@ -26,8 +26,8 @@ bool isCorrect(VectorXf const& out, int target) {
 void Worker::process() {
   // number of boxes in the different "layers"
   const int first_layer = 5;
-  const int second_layer = 20;
-  const int third_layer = 40;
+  const int second_layer = 50;
+  const int third_layer = 100;
   
   LayerParams layer0;
   layer0.connection_type = LayerParams::Initial;
@@ -107,14 +107,17 @@ void Worker::process() {
   int trailing_count = 0;
   int done = 0;
   
+  float learning_rate = 0.1;
+  float leak = 1;
+  
   while (true) {
-    RandomTransform transform(10, 0.15, 2.5);
+    RandomTransform transform(10, 0.1, 2.5);
     Image image = sampleRandomTraining();
     VectorXf target(10);
     target.setZero();
     target[image.digit()] = 1;
     net_->forwardPass(image.generate(transform));
-    net_->backwardsPass(target);
+    net_->backwardsPass(target, learning_rate);
     
     bool correct = isCorrect(net_->getOutput(), image.digit());
     if (trailing_correct[trailing_at]) {
@@ -126,12 +129,30 @@ void Worker::process() {
     }
     trailing_at = (trailing_at + 1) % 1000;
     
+    if (done % 20 == 0) {
+      emit dataReady();
+    }
+    
     if (done++ % 5000 == 0) {
       cout << "l[3]=" << net_->getOutput().transpose() << " digit=" << image.digit() << endl;
       cout << "l[2]=" << net_->getOutput2().transpose() << " digit=" << image.digit() << endl;
       cout << "trailing=" << (trailing_count / 10.0) << "%" << endl;
       test();
-      emit dataReady();
+//       emit dataReady();
+    }
+    
+    if (done % 5000 == 0) {
+      leak *= 0.7;
+      setLeak(leak);
+      cout << "leak decreased to " << leak << endl;
+    }
+    
+    if (done % 100000 == 0) {
+      learning_rate *= 0.5;
+      if (learning_rate < 1e-7) {
+        learning_rate = 1e-7;
+      }
+      cout << "decreased learning rate to " << learning_rate << endl;
     }
   }
 }

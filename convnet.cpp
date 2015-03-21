@@ -35,12 +35,12 @@ ConvNet::ConvNet(vector<LayerParams> const& params) {
         layers_[i].kernels[j].setZero();
       }
       layers_[i].kernels_deriv = layers_[i].kernels;
-      layers_[i].kernels_adagrad = layers_[i].kernels;
-//       layers_[i].kernels_momentum = layers_[i].kernels;
+//       layers_[i].kernels_adagrad = layers_[i].kernels;
+      layers_[i].kernels_momentum = layers_[i].kernels;
     }
     
     layers_[i].randomizeKernels();
-    layers_[i].setupAdagrad(1);
+//     layers_[i].setupAdagrad(1);
     
     // And do some sanity checking
     if (i == 0) {
@@ -92,7 +92,7 @@ float getScaleFactor(Cube const& values) {
   if (factor < 1) {
     factor = 1;
   }
-  return factor / 6;
+  return factor / 7;
 }
 
 void scale(Cube const& input_cube, Cube &output_cube) {
@@ -113,7 +113,7 @@ void scaleBack(Cube const& output_cube_deriv, Cube const& input_cube_value, Cube
   for (int i = 0; i < input_cube_value.d0() && !found; ++i) {
     for (int j = 0; j < input_cube_value.d1() && !found; ++j) {
       for (int k = 0; k < input_cube_value.d2(); ++k) {
-        if (abs(input_cube_value(i, j, k)) / 6 == factor) {
+        if (abs(input_cube_value(i, j, k)) / 7 == factor) {
           max_i = i;
           max_j = j;
           max_k = k;
@@ -140,7 +140,10 @@ void scaleBack(Cube const& output_cube_deriv, Cube const& input_cube_value, Cube
       output_cube_deriv.layer(0).cwiseProduct(input_cube_value.layer(0)).sum() / value / factor;
 }
 
-const float leak = 0.01;
+float leak = 1;
+void setLeak(float l) {
+  leak = l;
+}
 
 float relu(float x) {
   return x > 0 ? x : leak * x;
@@ -235,7 +238,7 @@ void ConvNet::forwardPass(MatrixXf const& input_data) {
   }
 }
 
-void ConvNet::backwardsPass(VectorXf const& target) {
+void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
   // already checked earlier, but do it here too to indicate where it gets used
   assert(params_[layers_.size() - 1].edge == 1);
   
@@ -276,7 +279,7 @@ void ConvNet::backwardsPass(VectorXf const& target) {
   for (int layer = 1; layer < layers_.size(); ++layer) {
     if (params_[layer].connection_type != LayerParams::SoftMax
         && params_[layer].connection_type != LayerParams::Scale) {
-      layers_[layer].update(MOMENTUM, 0.1);
+      layers_[layer].update(MOMENTUM, learning_rate);
     }
   }
 }
@@ -308,23 +311,23 @@ void Layer::randomizeKernels() {
   }
 }
 
-void Layer::setupAdagrad(float initial) {
-  for (int i = 0; i < kernels_adagrad.size(); ++i) {
-    kernels_adagrad[i].bias = initial;
-    for (int j = 0; j < kernels_adagrad[i].cube.height(); ++j) {
-      kernels_adagrad[i].cube.layer(j).setConstant(initial);
-    }
-  }
-}
+// void Layer::setupAdagrad(float initial) {
+//   for (int i = 0; i < kernels_adagrad.size(); ++i) {
+//     kernels_adagrad[i].bias = initial;
+//     for (int j = 0; j < kernels_adagrad[i].cube.height(); ++j) {
+//       kernels_adagrad[i].cube.layer(j).setConstant(initial);
+//     }
+//   }
+// }
 
 void Layer::update(float momentum_decay, float eps) {
   for (int i = 0; i < kernels.size(); ++i) {
-    kernels_deriv[i].scaleAndDivideByCwiseSqrt(eps, kernels_adagrad[i]);
-    kernels_adagrad[i].addCwiseSquare(kernels_deriv[i]);
-    kernels[i] -= kernels_deriv[i];
+//     kernels_deriv[i].scaleAndDivideByCwiseSqrt(eps, kernels_adagrad[i]);
+//     kernels_adagrad[i].addCwiseSquare(kernels_deriv[i]);
+//     kernels[i] -= kernels_deriv[i];
     
-//     kernels_momentum[i].scaleAndAddScaled(momentum_decay, eps, kernels_deriv[i]);
-//     kernels[i] -= kernels_momentum[i];
+    kernels_momentum[i].scaleAndAddScaled(momentum_decay, eps, kernels_deriv[i]);
+    kernels[i] -= kernels_momentum[i];
     
 //     kernels[i].addScaled(-eps, kernels_deriv[i]);
   }

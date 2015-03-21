@@ -8,6 +8,7 @@ class Layer;
 class LayerParams;
 
 void TestConvNet();
+void setLeak(float leak);
 
 class ConvNet {
 public:
@@ -15,7 +16,7 @@ public:
   ConvNet(vector<LayerParams> const& params);
   
   void forwardPass(MatrixXf const& input);
-  void backwardsPass(const VectorXf& target);
+  void backwardsPass(const VectorXf& target, float learning_rate);
   VectorXf getOutput() const;
   VectorXf getOutput2() const;
   
@@ -81,15 +82,15 @@ class Layer {
 public:
   int features() const { return kernels.size(); }
   void randomizeKernels();
-  void setupAdagrad(float initial);
+//   void setupAdagrad(float initial);
   void update(float momentum_decay, float eps);
   
   Cube value;
   Cube value_deriv;
   vector<Kernel> kernels;
   vector<Kernel> kernels_deriv;
-  vector<Kernel> kernels_adagrad;
-//   vector<Kernel> kernels_momentum;
+//   vector<Kernel> kernels_adagrad;
+  vector<Kernel> kernels_momentum;
 };
 
 #endif
