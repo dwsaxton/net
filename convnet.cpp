@@ -238,21 +238,22 @@ void ConvNet::forwardPass(MatrixXf const& input_data) {
   }
 }
 
-void ConvNet::backwardsPass(VectorXf const& target, float learning_rate) {
+void ConvNet::backwardsPass(int target, float learning_rate) {
   // already checked earlier, but do it here too to indicate where it gets used
   assert(params_[layers_.size() - 1].edge == 1);
   
-  assert(params_[layers_.size() - 1].features == target.size());
+  int top_features = params_[layers_.size() - 1].features;
   
   // Initialize the first set of derivatives, using the error function
   // E = (1/2) \sum_{i = 1}^{N} (v[i] - target[i])^2
   // so {dE}/{dv[i]} = v[i] - target[i]
   
   Layer & top_layer = layers_[layers_.size() - 1];
-  for (int i = 0; i < target.size(); ++i) {
+  for (int i = 0; i < top_features; ++i) {
     float v = top_layer.value(i, 0, 0);
-    float t = target[i];
-    top_layer.value_deriv(i, 0, 0) = v - t;
+    float t = i == target ? 1 : 0;
+    float weight = (i == target) ? top_features - 1 : 1;
+    top_layer.value_deriv(i, 0, 0) = weight * (v - t);
   }
     
   for (int layer = layers_.size() - 1; layer >= 1; --layer) {

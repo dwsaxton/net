@@ -16,7 +16,7 @@ public:
   ConvNet(vector<LayerParams> const& params);
   
   void forwardPass(MatrixXf const& input);
-  void backwardsPass(const VectorXf& target, float learning_rate);
+  void backwardsPass(int target, float learning_rate);
   VectorXf getOutput() const;
   VectorXf getOutput2() const;
   

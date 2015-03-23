@@ -107,17 +107,14 @@ void Worker::process() {
   int trailing_count = 0;
   int done = 0;
   
-  float learning_rate = 0.1;
-  float leak = 1;
+  float learning_rate = 0.01;
+  float leak = 0.01;
   
   while (true) {
     RandomTransform transform(10, 0.1, 2.5);
     Image image = sampleRandomTraining();
-    VectorXf target(10);
-    target.setZero();
-    target[image.digit()] = 1;
     net_->forwardPass(image.generate(transform));
-    net_->backwardsPass(target, learning_rate);
+    net_->backwardsPass(image.digit(), learning_rate);
     
     bool correct = isCorrect(net_->getOutput(), image.digit());
     if (trailing_correct[trailing_at]) {
@@ -129,7 +126,7 @@ void Worker::process() {
     }
     trailing_at = (trailing_at + 1) % 1000;
     
-    if (done % 20 == 0) {
+    if (done % 100 == 0) {
       emit dataReady();
     }
     
@@ -138,7 +135,6 @@ void Worker::process() {
       cout << "l[2]=" << net_->getOutput2().transpose() << " digit=" << image.digit() << endl;
       cout << "trailing=" << (trailing_count / 10.0) << "%" << endl;
       test();
-//       emit dataReady();
     }
     
     if (done % 5000 == 0) {
@@ -147,7 +143,7 @@ void Worker::process() {
       cout << "leak decreased to " << leak << endl;
     }
     
-    if (done % 100000 == 0) {
+    if (done % 10000 == 0) {
       learning_rate *= 0.5;
       if (learning_rate < 1e-7) {
         learning_rate = 1e-7;
@@ -185,9 +181,4 @@ void Worker::test() {
   }
   
   cout << " Score: " << total << " (" << (100.0 * total / test_count) << "%)" << endl;
-//   cout << 1.0 * total / test_count << endl;
-  
-//   if (++test_number == 100 ) {
-//     exit(0);
-//   }
 }
