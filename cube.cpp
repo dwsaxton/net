@@ -92,7 +92,7 @@ void Cube::addScaledSubcube(float mult, Cube const& cube, int i, int j) {
   assert(cube.d0_ == d0_);
   int s[3] = {0, i, j};
   reorder(s);
-  for (int a = 0; a < cube.height_; ++a) {
+  for (int a = 0; a < height_; ++a) {
     data_[a] += mult * cube.data_[a + s[0]].block(s[1], s[2], rows_, cols_);
   }
 }

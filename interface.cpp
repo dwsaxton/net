@@ -16,7 +16,7 @@ Interface::Interface()
   
   setupUi(this);
 
-  images_.resize(15);
+  images_.resize(25);
   images_[0] = image00;
   images_[1] = image01;
   images_[2] = image02;
@@ -32,6 +32,16 @@ Interface::Interface()
   images_[12] = image12;
   images_[13] = image13;
   images_[14] = image14;
+  images_[15] = image15;
+  images_[16] = image16;
+  images_[17] = image17;
+  images_[18] = image18;
+  images_[19] = image19;
+  images_[20] = image20;
+  images_[21] = image21;
+  images_[22] = image22;
+  images_[23] = image23;
+  images_[24] = image24;
   
   layers_.resize(4);
   layers_[0] = layer0;
@@ -76,7 +86,7 @@ void Interface::showRandomTransformed() {
   
   Image image = mnist.getTraining(random() % mnist.trainingCount());
   
-  for (int i = 0; i < 15; ++i) {
+  for (int i = 0; i < 25; ++i) {
     RandomTransform transform(10, 0.15, 2.5);
     MatrixXf mapped = image.generate(transform);
     images_[i]->setPixmap(QPixmap::fromImage(toQImage(mapped, 0, 1)));
@@ -104,7 +114,7 @@ void Interface::showFirstLayer() {
 void Interface::showFailingSample() {
   for (int i = 0; i < 10; ++i) {
     QImage image = toQImage(worker_->failing[i].original());
-    images_[i+5]->setPixmap(QPixmap::fromImage(image));
+    images_[i+15]->setPixmap(QPixmap::fromImage(image));
   }
 }
 
