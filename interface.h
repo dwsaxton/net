@@ -9,6 +9,7 @@ using namespace std;
 
 #include "ui_interface.h"
 
+class ConvNet;
 class Worker;
 
 class Interface : public QWidget, public Ui::Interface {
@@ -18,13 +19,13 @@ public:
   Interface();
   
 private slots:
-  void updateImages();
+  void updateImages(ConvNet*);
 
 private:
-  void showFirstLayer();
+  void showFirstLayer(ConvNet*);
   void showFailingSample();
   void showRandomTransformed();
-  void showAutoencoded();
+  void showAutoencoded(ConvNet*);
   
   Worker *worker_;
   vector<QLabel*> images_;

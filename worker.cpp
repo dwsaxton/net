@@ -3,6 +3,7 @@
 #include <iostream>
 using namespace std;
 
+#include "convnet.h"
 #include "mnist.h"
 
 Worker::Worker()
@@ -102,82 +103,81 @@ vector<LayerParams> createShallowMnist() {
   return vector<LayerParams>({layer0, layer1, layer2, layer3, layer4});
 }
 
-vector<LayerParams> createAutoencoder() {
-  const int middle_features = 20;
-  
+vector<LayerParams> createAutoencoder(int middle_features) {
   LayerParams layer0;
   layer0.connection_type = LayerParams::Initial;
-  layer0.features = 1;
   layer0.edge = 28;
   
   LayerParams layer1;
   layer1.connection_type = LayerParams::Convolution;
   layer1.features = middle_features;
-  layer1.edge = 1;
   layer1.kernel = 28;
+  layer1.neuron_type = LayerParams::Sigmoid;
   
   LayerParams layer2;
   layer2.connection_type = LayerParams::Convolution;
   layer2.features = 28 * 28;
-  layer2.edge = 1;
+  layer2.neuron_type = LayerParams::Sigmoid;
+  
+  return vector<LayerParams>({layer0, layer1, layer2});
+}
+
+vector<LayerParams> createAutoencoderMiddle(int input_features, int middle_features) {
+  LayerParams layer0;
+  layer0.connection_type = LayerParams::Initial;
+  layer0.features = input_features;
+  
+  LayerParams layer1;
+  layer1.connection_type = LayerParams::Convolution;
+  layer1.features = middle_features;
+  layer1.neuron_type = LayerParams::Sigmoid;
+  
+  LayerParams layer2;
+  layer2.connection_type = LayerParams::Convolution;
+  layer2.features = input_features;
+  layer2.neuron_type = LayerParams::Sigmoid;
   
   return vector<LayerParams>({layer0, layer1, layer2});
 }
 
 void Worker::process() {
-  vector<LayerParams> params = createAutoencoder();
-  float weight_decay = 0.01;
-  
-  net_ = new ConvNet(params, weight_decay);
   mnist_.init();
   
-//   bool trailing_correct[1000] = {false};
-//   int trailing_at = 0;
-//   int trailing_count = 0;
-  int done = 0;
+  float weight_decay = 0.0001;
+  ConvNet *net = new ConvNet(createAutoencoder(400), weight_decay);
   
-  float learning_rate = 0.001;
-  float leak = 0.01;
-  
-  while (true) {
-    RandomTransform transform(10, 0.1, 2.5);
+  auto set_input_and_target = [&] () {
     Image image = sampleRandomTraining();
-    MatrixXf transformed = image.generate(transform);
-    net_->forwardPass(transformed);
-//     net_->setTarget(image.digit());
-    net_->setTarget(transformed);
-    net_->backwardsPass(learning_rate);
+    MatrixXf transformed = image.generate(RandomTransform(10, 0.1, 2.5));
+    net->setInput(transformed);
+    net->setTarget(transformed);
+  };
+  
+  train(net, set_input_and_target);
+  
+  ConvNet *net2 = new ConvNet(createAutoencoderMiddle(400, 200), weight_decay);
+  
+  set_input_and_target = [&] () {
+    // TODO this
+  };
+  
+  train(net2, set_input_and_target);
+  
+}
+
+void Worker::train(ConvNet *net, std::function<void ()> set_input_and_target) {
+  float learning_rate = 0.001;
+  
+  for (int done = 1; done < 100000; ++done) {
+    set_input_and_target();
+    net->forwardPass();
+    net->backwardsPass(learning_rate);
     
-//     bool correct = isCorrect(net_->getOutput(), image.digit());
-//     if (trailing_correct[trailing_at]) {
-//       trailing_count --;
-//     }
-//     trailing_correct[trailing_at] = correct;
-//     if (correct) {
-//       trailing_count++;
-//     }
-//     trailing_at = (trailing_at + 1) % 1000;
-    
-    if (done % 100 == 0) {
-      emit dataReady();
+    if (done % 2000 == 0) {
+      emit dataReady(net);
     }
     
-    done++;
-    
-//     if (done++ % 5000 == 0) {
-//       cout << "l[3]=" << net_->getOutput().transpose() << " digit=" << image.digit() << endl;
-//       cout << "l[2]=" << net_->getOutput2().transpose() << " digit=" << image.digit() << endl;
-//       cout << "trailing=" << (trailing_count / 10.0) << "%" << endl;
-//       test();
-//     }
-    
-    if (done % 5000 == 0) {
-      leak *= 0.7;
-      setLeak(leak);
-      cout << "leak decreased to " << leak << endl;
-    }
-    
-    if (done % 50000 == 0) {
+    if (done % 20000 == 0) {
       learning_rate *= 0.5;
       if (learning_rate < 1e-7) {
         learning_rate = 1e-7;
@@ -192,7 +192,7 @@ Image Worker::sampleRandomTraining() const {
 }
 
 static int test_number = 0;
-void Worker::test() {
+void Worker::test(ConvNet *net) {
   int test_count = mnist_.testCount();
   
   int failing_count[10] = {0};
@@ -200,8 +200,8 @@ void Worker::test() {
   int total = 0;
   for (int i = 0; i < test_count; ++i) {
     Image image = mnist_.getTraining(i);
-    net_->forwardPass(image.original());
-    VectorXf out = net_->getOutput();
+    net->setInput(image.original());
+    VectorXf out = net->getOutput();
     int target_digit = image.digit();
     bool good = isCorrect(out, target_digit);
     if (good) {

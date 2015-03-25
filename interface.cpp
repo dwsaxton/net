@@ -7,6 +7,7 @@ using namespace std;
 #include <QPainter>
 #include <QThread>
 
+#include "convnet.h"
 #include "cube.h"
 #include "worker.h"
 
@@ -55,7 +56,7 @@ Interface::Interface()
   worker_ = new Worker;
   worker_->moveToThread(thread);
   connect(thread, SIGNAL(started()), worker_, SLOT(process()));
-  connect(worker_, SIGNAL(dataReady()), this, SLOT(updateImages()));
+  connect(worker_, SIGNAL(dataReady(ConvNet*)), this, SLOT(updateImages(ConvNet*)));
   thread->start();
 }
 
@@ -97,8 +98,8 @@ void Interface::showRandomTransformed() {
   }
 }
 
-void Interface::showFirstLayer() {
-  Layer const& layer = worker_->net_->layers_[1];
+void Interface::showFirstLayer(ConvNet* net) {
+  Layer const& layer = net->layers_[1];
   float mn = HUGE_VAL;
   float mx = -HUGE_VAL;
   
@@ -122,13 +123,14 @@ void Interface::showFailingSample() {
   }
 }
 
-void Interface::showAutoencoded() {
+void Interface::showAutoencoded(ConvNet* net) {
   for (int i = 0; i < 10; ++i) {
     int at = i + (i >= 5 ? 5 : 0);
     Image image = worker_->sampleRandomTraining();
     images_[at]->setPixmap(QPixmap::fromImage(toQImage(image.original())));
-    worker_->net_->forwardPass(image.original());
-    VectorXf output = worker_->net_->getOutput();
+    net->setInput(image.original());
+    net->forwardPass();
+    VectorXf output = net->getOutput();
     assert(output.size() == 28 * 28);
     MatrixXf output_as_square(28, 28);
     for (int i = 0; i < 28 * 28; ++i) {
@@ -139,16 +141,16 @@ void Interface::showAutoencoded() {
 }
 
 
-void Interface::updateImages() {
-//   showFirstLayer();
+void Interface::updateImages(ConvNet* net) {
+//   showFirstLayer(net);
 //   showFailingSample();
-  showAutoencoded();
+  showAutoencoded(net);
   
   
   
 //   Image image = worker_->sampleRandomTraining();
 //   layers_[0]->setPixmap(QPixmap::fromImage(toQImage(image.original())));
-//   worker_->net_->forwardPass(image.original());
+//   net->forwardPass(image.original());
 //   
 //   int layers[3] = {2, 4, 5};
 //   int col_count[3] = {5, 10, 20};
@@ -159,7 +161,7 @@ void Interface::updateImages() {
 //     QImage image(500, row_count[layer_index] * box_image_size[layer_index], QImage::Format_RGB32);
 //     QPainter painter(&image);
 //     
-//     Layer const & layer = worker_->net_->layers_[layers[layer_index]];
+//     Layer const & layer = net->layers_[layers[layer_index]];
 //     int features = layer.features();
 //     
 //     float min = layer.value.minCoeff();

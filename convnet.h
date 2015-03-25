@@ -15,11 +15,8 @@ public:
   ConvNet();
   ConvNet(vector<LayerParams> const& params, float weight_decay);
   
-  void forwardPass(MatrixXf const& input);
-  /**
-   * Sets the target so that output @param target is 1, and the others are zero.
-   */
-  void setTarget(int target);
+  void setInput(MatrixXf const& input);
+  void forwardPass();
   void setTarget(MatrixXf const& target);
   void backwardsPass(float learning_rate);
   VectorXf getOutput() const;
@@ -28,9 +25,9 @@ public:
   vector<Layer> layers_;
   
 private:
-  vector<LayerParams> params_;
   void rescale();
   float weight_decay;
+  MatrixXf target_;
 };
 
 class LayerParams {
@@ -42,7 +39,12 @@ public:
     SoftMax
   };
   
-  LayerParams() { edge = features = kernel = stride = 1; connection_type = Initial; }
+  enum NeuronType {
+    ReLU,
+    Sigmoid,
+  };
+  
+  LayerParams() { edge = features = kernel = stride = 1; connection_type = Initial; neuron_type = ReLU; }
   
   // Connection with the previous layer
   ConnectionType connection_type;
@@ -54,6 +56,8 @@ public:
   int kernel;
   // For convolution, the spacing between mask samplings
   int stride;
+  // For use with Convolution, the neuron function to use
+  NeuronType neuron_type;
 };
 
 class Kernel {
@@ -86,17 +90,17 @@ public:
 
 class Layer {
 public:
+  Layer();
+  Layer(LayerParams const& params, int input_features, int stack_coordinate = -1);
   int features() const { return kernels.size(); }
-  void randomizeKernels();
-//   void setupAdagrad(float initial);
   void update(float momentum_decay, float eps, float weight_decay);
   
   Cube value;
   Cube value_deriv;
   vector<Kernel> kernels;
   vector<Kernel> kernels_deriv;
-//   vector<Kernel> kernels_adagrad;
   vector<Kernel> kernels_momentum;
+  LayerParams params;
 };
 
 #endif

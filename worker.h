@@ -3,9 +3,9 @@
 
 #include <QObject>
 
-#include "convnet.h"
 #include "mnist.h"
-#include "neuralnet.h"
+
+class ConvNet;
 
 class Worker : public QObject
 {
@@ -15,8 +15,6 @@ public:
   Worker();
   ~Worker();
   
-  ConvNet *net_;
-  
   Image failing[10];
   
   Image sampleRandomTraining() const;
@@ -25,10 +23,11 @@ public slots:
   void process();
 
 signals:
-  void dataReady();
+  void dataReady(ConvNet *net);
   
 private:
-  void test();
+  void train(ConvNet *net, std::function<void ()> set_input_and_target);
+  void test(ConvNet *net);
   
   Mnist mnist_;
 };

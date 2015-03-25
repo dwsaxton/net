@@ -15,10 +15,10 @@ void Mnist::init() {
   
   ifstream training_labels, training_pixels, test_labels, test_pixels;
   
-  training_labels.open("/home/david/projects/Digit/train-labels-idx1-ubyte", ios::in | ios::binary | ios::ate);
-  training_pixels.open("/home/david/projects/Digit/train-images-idx3-ubyte", ios::in | ios::binary | ios::ate);
-  test_labels.open("/home/david/projects/Digit/t10k-labels-idx1-ubyte", ios::in | ios::binary | ios::ate);
-  test_pixels.open("/home/david/projects/Digit/t10k-images-idx3-ubyte", ios::in | ios::binary | ios::ate);
+  training_labels.open("../train-labels-idx1-ubyte", ios::in | ios::binary | ios::ate);
+  training_pixels.open("../train-images-idx3-ubyte", ios::in | ios::binary | ios::ate);
+  test_labels.open("../t10k-labels-idx1-ubyte", ios::in | ios::binary | ios::ate);
+  test_pixels.open("../t10k-images-idx3-ubyte", ios::in | ios::binary | ios::ate);
 
   initImages(training_labels, training_pixels, TRAINING_COUNT, training_);
   initImages(test_labels, test_pixels, TEST_COUNT, test_);

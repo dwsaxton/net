@@ -13,37 +13,19 @@ ConvNet::ConvNet() {
 ConvNet::ConvNet(vector<LayerParams> const& params, float weight_decay) {
   this->weight_decay = weight_decay;
   assert(params.size() >= 1);
-  params_ = params;
   layers_.resize(params.size());
   
   for (int i = layers_.size() - 1; i >= 0; --i) {
+    int input_features = i > 0 ? params[i - 1].features : 0;
     if (i < layers_.size() - 1 && layers_[i + 1].kernels.size() > 0) {
       int upper_kernel_direction = layers_[i + 1].kernels[0].cube.stackCoordinate();
-      layers_[i].value = Cube(params[i].features, params[i].edge, params[i].edge, upper_kernel_direction);
+      layers_[i] = Layer(params[i], input_features, upper_kernel_direction);
     } else {
-      layers_[i].value = Cube(params[i].features, params[i].edge, params[i].edge);
+      layers_[i] = Layer(params[i], input_features);
     }
-    layers_[i].value_deriv = layers_[i].value;
-    
-    LayerParams::ConnectionType type = params[i].connection_type;
-    
-    if (i > 0 && type == LayerParams::Convolution) {
-      int features = params[i].features;
-      int input_features = params[i - 1].features;
-      layers_[i].kernels.resize(features);
-      for (int j = 0; j < features; ++j) {
-        layers_[i].kernels[j] = Kernel(input_features, params[i].kernel, params[i].kernel);
-        layers_[i].kernels[j].setZero();
-      }
-      layers_[i].kernels_deriv = layers_[i].kernels;
-//       layers_[i].kernels_adagrad = layers_[i].kernels;
-      layers_[i].kernels_momentum = layers_[i].kernels;
-    }
-    
-    layers_[i].randomizeKernels();
-//     layers_[i].setupAdagrad(1);
     
     // And do some sanity checking
+    LayerParams::ConnectionType type = params[i].connection_type;
     if (i == 0) {
       assert(type == LayerParams::Initial);
       assert(params[i].features == 1);
@@ -93,7 +75,7 @@ float getScaleFactor(Cube const& values) {
   if (factor < 1) {
     factor = 1;
   }
-  return factor / 7;
+  return factor;
 }
 
 void scale(Cube const& input_cube, Cube &output_cube) {
@@ -114,7 +96,7 @@ void scaleBack(Cube const& output_cube_deriv, Cube const& input_cube_value, Cube
   for (int i = 0; i < input_cube_value.d0() && !found; ++i) {
     for (int j = 0; j < input_cube_value.d1() && !found; ++j) {
       for (int k = 0; k < input_cube_value.d2(); ++k) {
-        if (abs(input_cube_value(i, j, k)) / 7 == factor) {
+        if (abs(input_cube_value(i, j, k)) == factor) {
           max_i = i;
           max_j = j;
           max_k = k;
@@ -150,7 +132,11 @@ float relu(float x) {
   return x > 0 ? x : leak * x;
 }
 
-void convolution(Cube const& input, vector<Kernel> const& kernels, int stride, Cube &output) {
+float sigmoid(float x) {
+  return 1 / (1 + exp(-x));
+}
+
+void convolution(LayerParams::NeuronType neuron_type, Cube const& input, vector<Kernel> const& kernels, int stride, Cube &output) {
   int output_features = kernels.size();
   assert(output.d0() == output_features);
   int edge = kernels[0].cube.d1();
@@ -169,13 +155,21 @@ void convolution(Cube const& input, vector<Kernel> const& kernels, int stride, C
         int in_x = j * stride;
         int in_y = k * stride;
         float sum = kernels[i].bias + input.computeKernel(kernels[i].cube, in_x, in_y);
-        output(i, j, k) = relu(sum);
+        output(i, j, k) = neuron_type == LayerParams::ReLU ? relu(sum) : sigmoid(sum);
       }
     }
   }
 }
 
-void convolutionBack(Cube const& output_value, Cube const& output_deriv, int stride, Cube const& input_value, Cube & input_deriv, vector<Kernel> const& kernels, vector<Kernel> & kernels_deriv) {
+void convolutionBack(
+    LayerParams::NeuronType neuron_type,
+    Cube const& output_value,
+    Cube const& output_deriv,
+    int stride,
+    Cube const& input_value,
+    Cube & input_deriv,
+    vector<Kernel> const& kernels,
+    vector<Kernel> & kernels_deriv) {
   int output_features = kernels_deriv.size();
   assert(output_features == output_value.d0());
   
@@ -188,8 +182,13 @@ void convolutionBack(Cube const& output_value, Cube const& output_deriv, int str
     for (int j = 0; j < output_value.d1(); ++j) {
       for (int k = 0; k < output_value.d2(); ++k) {
         float deriv_base = output_deriv(i, j, k);
-        if (output_value(i, j, k) < 0) {
-          deriv_base *= leak;
+        float v = output_value(i, j, k);
+        if (neuron_type == LayerParams::ReLU) {
+          if (v < 0) {
+            deriv_base *= leak;
+          }
+        } else {
+          deriv_base *= v * (1 - v);
         }
     
         int in_x = j * stride;
@@ -203,9 +202,9 @@ void convolutionBack(Cube const& output_value, Cube const& output_deriv, int str
   }
 }
 
-void ConvNet::forwardPass(MatrixXf const& input_data) {
-  int range_i = params_[0].edge - input_data.rows();
-  int range_j = params_[0].edge - input_data.cols();
+void ConvNet::setInput(MatrixXf const& input_data) {
+  int range_i = layers_[0].params.edge - input_data.rows();
+  int range_j = layers_[0].params.edge - input_data.cols();
   assert(range_i >= 0);
   assert(range_j >= 0);
   int offset_i = range_i == 0 ? 0 : rand() % range_i;
@@ -216,12 +215,14 @@ void ConvNet::forwardPass(MatrixXf const& input_data) {
     layers_[0].value.layer(0).setZero();
     layers_[0].value.layer(0).block(offset_i, offset_j, input_data.rows(), input_data.cols()) = input_data;
   }
-  
+}
+
+void ConvNet::forwardPass() {
   for (int layer = 1; layer < layers_.size(); ++layer) {
     Layer const& input = layers_[layer - 1];
     Layer & output = layers_[layer];
     
-    switch (params_[layer].connection_type) {
+    switch (output.params.connection_type) {
       case LayerParams::Initial:
         // already handled
         continue;
@@ -232,35 +233,39 @@ void ConvNet::forwardPass(MatrixXf const& input_data) {
         softMax(input.value, output.value);
         continue;
       case LayerParams::Convolution:
-        int stride = params_[layer].stride;
-        convolution(input.value, output.kernels, stride, output.value);
+        int stride = output.params.stride;
+        convolution(output.params.neuron_type, input.value, output.kernels, stride, output.value);
         continue;
     }
   }
 }
 
-void ConvNet::setTarget(int target) {
-  // already checked earlier, but do it here too to indicate where it gets used
-  assert(params_[layers_.size() - 1].edge == 1);
-  
-  int top_features = params_[layers_.size() - 1].features;
-  
-  // Initialize the first set of derivatives, using the error function
-  // E = (1/2) \sum_{i = 1}^{N} (v[i] - target[i])^2
-  // so {dE}/{dv[i]} = v[i] - target[i]
-  
-  Layer & top_layer = layers_[layers_.size() - 1];
-  for (int i = 0; i < top_features; ++i) {
-    float v = top_layer.value(i, 0, 0);
-    float t = i == target ? 1 : 0;
-    float weight = (i == target) ? top_features - 1 : 1;
-    top_layer.value_deriv(i, 0, 0) = weight * (v - t);
-  }
-}
+// void ConvNet::setTarget(int target) {
+//   // already checked earlier, but do it here too to indicate where it gets used
+//   assert(layers_[layers_.size() - 1].params.edge == 1);
+//   
+//   int top_features = layers_[layers_.size() - 1].params.features;
+//   
+//   // Initialize the first set of derivatives, using the error function
+//   // E = (1/2) \sum_{i = 1}^{N} (v[i] - target[i])^2
+//   // so {dE}/{dv[i]} = v[i] - target[i]
+//   
+//   Layer & top_layer = layers_[layers_.size() - 1];
+//   for (int i = 0; i < top_features; ++i) {
+//     float v = top_layer.value(i, 0, 0);
+//     float t = i == target ? 1 : 0;
+//     float weight = (i == target) ? top_features - 1 : 1;
+//     top_layer.value_deriv(i, 0, 0) = weight * (v - t);
+//   }
+// }
 
 void ConvNet::setTarget(MatrixXf const& target) {
-  int rows = target.rows();
-  int cols = target.cols();
+  target_ = target;
+}
+
+void ConvNet::backwardsPass(float learning_rate) {
+  int rows = target_.rows();
+  int cols = target_.cols();
   Layer & top_layer = layers_[layers_.size() - 1];
   // Just assumptions we've used for implementing this function
   assert(top_layer.value.d0() == rows * cols);
@@ -270,18 +275,16 @@ void ConvNet::setTarget(MatrixXf const& target) {
     for (int j = 0; j < cols; ++j) {
       int k = i * cols + j;
       float v = top_layer.value(k, 0, 0);
-      float t = target(i, j);
+      float t = target_(i, j);
       top_layer.value_deriv(k, 0, 0) = v - t;
     }
   }
-}
-
-void ConvNet::backwardsPass(float learning_rate) {
+  
   for (int layer = layers_.size() - 1; layer >= 1; --layer) {
     Layer &input = layers_[layer - 1];
     Layer &output = layers_[layer];
     
-    switch (params_[layer].connection_type) {
+    switch (output.params.connection_type) {
       case LayerParams::Initial:
         assert(false); // should only be initial layer for layer = 0
         continue;
@@ -292,15 +295,15 @@ void ConvNet::backwardsPass(float learning_rate) {
         softMaxBack(output.value, output.value_deriv, input.value_deriv);
         continue;
       case LayerParams::Convolution:
-        int stride = params_[layer].stride;
-        convolutionBack(output.value, output.value_deriv, stride, input.value, input.value_deriv, output.kernels, output.kernels_deriv);
+        int stride = output.params.stride;
+        convolutionBack(output.params.neuron_type, output.value, output.value_deriv, stride, input.value, input.value_deriv, output.kernels, output.kernels_deriv);
         continue;
     }
   }
   
   for (int layer = 1; layer < layers_.size(); ++layer) {
-    if (params_[layer].connection_type != LayerParams::SoftMax
-        && params_[layer].connection_type != LayerParams::Scale) {
+    if (layers_[layer].params.connection_type != LayerParams::SoftMax
+        && layers_[layer].params.connection_type != LayerParams::Scale) {
       layers_[layer].update(MOMENTUM, learning_rate, weight_decay);
     }
   }
@@ -326,21 +329,35 @@ VectorXf ConvNet::getOutput2() const {
   }
 }
 
-
-void Layer::randomizeKernels() {
-  for (int i = 0; i < kernels.size(); ++i) {
-    kernels[i].cube.setRandom();
-  }
+Layer::Layer() {
 }
 
-// void Layer::setupAdagrad(float initial) {
-//   for (int i = 0; i < kernels_adagrad.size(); ++i) {
-//     kernels_adagrad[i].bias = initial;
-//     for (int j = 0; j < kernels_adagrad[i].cube.height(); ++j) {
-//       kernels_adagrad[i].cube.layer(j).setConstant(initial);
-//     }
-//   }
-// }
+Layer::Layer(LayerParams const& params, int input_features, int stack_coordinate) {
+  this->params = params;
+  if (stack_coordinate >= 0) {
+    value = Cube(params.features, params.edge, params.edge, stack_coordinate);
+  } else {
+    value = Cube(params.features, params.edge, params.edge);
+  }
+  value_deriv = value;
+  
+  LayerParams::ConnectionType type = params.connection_type;
+  
+  if (type == LayerParams::Convolution) {
+    int features = params.features;
+    kernels.resize(features);
+    for (int j = 0; j < features; ++j) {
+      kernels[j] = Kernel(input_features, params.kernel, params.kernel);
+      kernels[j].setZero();
+    }
+    kernels_deriv = kernels;
+    kernels_momentum = kernels;
+    
+    for (int j = 0; j < features; ++j) {
+      kernels[j].cube.setRandom();
+    }
+  }
+}
 
 void Layer::update(float momentum_decay, float eps, float weight_decay) {
   for (int i = 0; i < kernels.size(); ++i) {
@@ -354,7 +371,6 @@ void Layer::update(float momentum_decay, float eps, float weight_decay) {
     
 //     kernels[i].addScaled(-eps, kernels_deriv[i]);
   }
-  
   
 //   for (int i = 0; i < kernels.size(); ++i) {
 //     kernels[i] /= norm;
@@ -442,7 +458,7 @@ void TestConvolution() {
   int stride = 2;
   Cube output(1, 2, 2);
   
-  convolution(cube, kernels, stride, output);
+  convolution(LayerParams::ReLU, cube, kernels, stride, output);
   
   assert(output(0, 0, 0) == 1);
   assert(output(0, 0, 1) == leak * (-7 * 5 + 1));
@@ -480,7 +496,7 @@ void TestConvolutionBack() {
   input_value(0, 1, 0) = 2;
   input_value(0, 1, 1) = 3;
   
-  convolutionBack(output_value, output_deriv, stride, input_value, input_deriv, kernels, kernels_deriv);
+  convolutionBack(LayerParams::ReLU, output_value, output_deriv, stride, input_value, input_deriv, kernels, kernels_deriv);
   
   assert(abs(kernel_deriv.cube(0,0,0) - (20 - 15 - 2 * 40 * leak)) < 0.00001);
   assert(abs(kernel_deriv.bias - (10 + 20 - 40 * leak - 5)) < 0.00001);
