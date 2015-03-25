@@ -10,7 +10,8 @@ const float MOMENTUM = 0.9;
 ConvNet::ConvNet() {
 }
 
-ConvNet::ConvNet(vector<LayerParams> const& params) {
+ConvNet::ConvNet(vector<LayerParams> const& params, float weight_decay) {
+  this->weight_decay = weight_decay;
   assert(params.size() >= 1);
   params_ = params;
   layers_.resize(params.size());
@@ -238,7 +239,7 @@ void ConvNet::forwardPass(MatrixXf const& input_data) {
   }
 }
 
-void ConvNet::backwardsPass(int target, float learning_rate) {
+void ConvNet::setTarget(int target) {
   // already checked earlier, but do it here too to indicate where it gets used
   assert(params_[layers_.size() - 1].edge == 1);
   
@@ -255,7 +256,27 @@ void ConvNet::backwardsPass(int target, float learning_rate) {
     float weight = (i == target) ? top_features - 1 : 1;
     top_layer.value_deriv(i, 0, 0) = weight * (v - t);
   }
-    
+}
+
+void ConvNet::setTarget(MatrixXf const& target) {
+  int rows = target.rows();
+  int cols = target.cols();
+  Layer & top_layer = layers_[layers_.size() - 1];
+  // Just assumptions we've used for implementing this function
+  assert(top_layer.value.d0() == rows * cols);
+  assert(top_layer.value.d1() == 1);
+  assert(top_layer.value.d2() == 1);
+  for (int i = 0; i < rows; ++i) {
+    for (int j = 0; j < cols; ++j) {
+      int k = i * cols + j;
+      float v = top_layer.value(k, 0, 0);
+      float t = target(i, j);
+      top_layer.value_deriv(k, 0, 0) = v - t;
+    }
+  }
+}
+
+void ConvNet::backwardsPass(float learning_rate) {
   for (int layer = layers_.size() - 1; layer >= 1; --layer) {
     Layer &input = layers_[layer - 1];
     Layer &output = layers_[layer];
@@ -280,7 +301,7 @@ void ConvNet::backwardsPass(int target, float learning_rate) {
   for (int layer = 1; layer < layers_.size(); ++layer) {
     if (params_[layer].connection_type != LayerParams::SoftMax
         && params_[layer].connection_type != LayerParams::Scale) {
-      layers_[layer].update(MOMENTUM, learning_rate);
+      layers_[layer].update(MOMENTUM, learning_rate, weight_decay);
     }
   }
 }
@@ -321,7 +342,7 @@ void Layer::randomizeKernels() {
 //   }
 // }
 
-void Layer::update(float momentum_decay, float eps) {
+void Layer::update(float momentum_decay, float eps, float weight_decay) {
   for (int i = 0; i < kernels.size(); ++i) {
 //     kernels_deriv[i].scaleAndDivideByCwiseSqrt(eps, kernels_adagrad[i]);
 //     kernels_adagrad[i].addCwiseSquare(kernels_deriv[i]);
@@ -329,6 +350,7 @@ void Layer::update(float momentum_decay, float eps) {
     
     kernels_momentum[i].scaleAndAddScaled(momentum_decay, eps, kernels_deriv[i]);
     kernels[i] -= kernels_momentum[i];
+    kernels[i].addScaled(eps * weight_decay, kernels[i]);
     
 //     kernels[i].addScaled(-eps, kernels_deriv[i]);
   }

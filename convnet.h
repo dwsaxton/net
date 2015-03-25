@@ -13,10 +13,15 @@ void setLeak(float leak);
 class ConvNet {
 public:
   ConvNet();
-  ConvNet(vector<LayerParams> const& params);
+  ConvNet(vector<LayerParams> const& params, float weight_decay);
   
   void forwardPass(MatrixXf const& input);
-  void backwardsPass(int target, float learning_rate);
+  /**
+   * Sets the target so that output @param target is 1, and the others are zero.
+   */
+  void setTarget(int target);
+  void setTarget(MatrixXf const& target);
+  void backwardsPass(float learning_rate);
   VectorXf getOutput() const;
   VectorXf getOutput2() const;
   
@@ -25,6 +30,7 @@ public:
 private:
   vector<LayerParams> params_;
   void rescale();
+  float weight_decay;
 };
 
 class LayerParams {
@@ -83,7 +89,7 @@ public:
   int features() const { return kernels.size(); }
   void randomizeKernels();
 //   void setupAdagrad(float initial);
-  void update(float momentum_decay, float eps);
+  void update(float momentum_decay, float eps, float weight_decay);
   
   Cube value;
   Cube value_deriv;

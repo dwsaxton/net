@@ -72,7 +72,11 @@ QImage toQImage(MatrixXf values, float min = 0, float max = 1) {
       } else {
         v = (v - min) / (max - min);
       }
-//       cout << "v=" << v << endl;
+      if (v < 0 || !isfinite(v)) {
+        v = 0;
+      } else if (v > 1) {
+        v = 1;
+      }
       int grey = (int) (255 * v);
       image.setPixel(i, j, QColor(grey, grey, grey).rgb());
     }
@@ -118,10 +122,29 @@ void Interface::showFailingSample() {
   }
 }
 
-void Interface::updateImages() {
-  showFirstLayer();
-  showFailingSample();
+void Interface::showAutoencoded() {
+  for (int i = 0; i < 10; ++i) {
+    int at = i + (i >= 5 ? 5 : 0);
+    Image image = worker_->sampleRandomTraining();
+    images_[at]->setPixmap(QPixmap::fromImage(toQImage(image.original())));
+    worker_->net_->forwardPass(image.original());
+    VectorXf output = worker_->net_->getOutput();
+    assert(output.size() == 28 * 28);
+    MatrixXf output_as_square(28, 28);
+    for (int i = 0; i < 28 * 28; ++i) {
+      output_as_square(i / 28, i % 28) = output(i);
+    }
+    images_[at + 5]->setPixmap(QPixmap::fromImage(toQImage(output_as_square)));
+  }
+}
 
+
+void Interface::updateImages() {
+//   showFirstLayer();
+//   showFailingSample();
+  showAutoencoded();
+  
+  
   
 //   Image image = worker_->sampleRandomTraining();
 //   layers_[0]->setPixmap(QPixmap::fromImage(toQImage(image.original())));

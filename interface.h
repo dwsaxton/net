@@ -24,6 +24,7 @@ private:
   void showFirstLayer();
   void showFailingSample();
   void showRandomTransformed();
+  void showAutoencoded();
   
   Worker *worker_;
   vector<QLabel*> images_;
