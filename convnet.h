@@ -18,6 +18,7 @@ public:
   void setInput(MatrixXf const& input);
   void forwardPass();
   void setTarget(MatrixXf const& target);
+  void setTarget(int target);
   void backwardsPass(float learning_rate);
   VectorXf getOutput() const;
   VectorXf getOutput2() const;
@@ -27,7 +28,8 @@ public:
 private:
   void rescale();
   float weight_decay;
-  MatrixXf target_;
+  MatrixXf target_matrix_;
+  int target_int_;
 };
 
 class LayerParams {

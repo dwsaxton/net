@@ -144,9 +144,9 @@ void Interface::showAutoencoded(ConvNet* net) {
 
 
 void Interface::updateImages(ConvNet* net) {
-//   showFirstLayer(net);
-//   showFailingSample();
-  showAutoencoded(net);
+  showFirstLayer(net);
+  showFailingSample();
+//   showAutoencoded(net);
   
   
   

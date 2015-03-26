@@ -240,43 +240,48 @@ void ConvNet::forwardPass() {
   }
 }
 
-// void ConvNet::setTarget(int target) {
-//   // already checked earlier, but do it here too to indicate where it gets used
-//   assert(layers_[layers_.size() - 1].params.edge == 1);
-//   
-//   int top_features = layers_[layers_.size() - 1].params.features;
-//   
-//   // Initialize the first set of derivatives, using the error function
-//   // E = (1/2) \sum_{i = 1}^{N} (v[i] - target[i])^2
-//   // so {dE}/{dv[i]} = v[i] - target[i]
-//   
-//   Layer & top_layer = layers_[layers_.size() - 1];
-//   for (int i = 0; i < top_features; ++i) {
-//     float v = top_layer.value(i, 0, 0);
-//     float t = i == target ? 1 : 0;
-//     float weight = (i == target) ? top_features - 1 : 1;
-//     top_layer.value_deriv(i, 0, 0) = weight * (v - t);
-//   }
-// }
+void ConvNet::setTarget(int target) {
+  target_int_ = target;
+}
 
 void ConvNet::setTarget(MatrixXf const& target) {
-  target_ = target;
+  target_matrix_ = target;
+  target_int_ = -1;
 }
 
 void ConvNet::backwardsPass(float learning_rate) {
-  int rows = target_.rows();
-  int cols = target_.cols();
-  Layer & top_layer = layers_[layers_.size() - 1];
-  // Just assumptions we've used for implementing this function
-  assert(top_layer.value.d0() == rows * cols);
-  assert(top_layer.value.d1() == 1);
-  assert(top_layer.value.d2() == 1);
-  for (int i = 0; i < rows; ++i) {
-    for (int j = 0; j < cols; ++j) {
-      int k = i * cols + j;
-      float v = top_layer.value(k, 0, 0);
-      float t = target_(i, j);
-      top_layer.value_deriv(k, 0, 0) = v - t;
+  if (target_int_ >= 0) {
+    // already checked earlier, but do it here too to indicate where it gets used
+    assert(layers_[layers_.size() - 1].params.edge == 1);
+    
+    int top_features = layers_[layers_.size() - 1].params.features;
+    
+    // Initialize the first set of derivatives, using the error function
+    // E = (1/2) \sum_{i = 1}^{N} (v[i] - target[i])^2
+    // so {dE}/{dv[i]} = v[i] - target[i]
+    
+    Layer & top_layer = layers_[layers_.size() - 1];
+    for (int i = 0; i < top_features; ++i) {
+      float v = top_layer.value(i, 0, 0);
+      float t = i == target_int_ ? 1 : 0;
+      float weight = (i == target_int_) ? top_features - 1 : 1;
+      top_layer.value_deriv(i, 0, 0) = weight * (v - t);
+    }
+  } else {
+    int rows = target_matrix_.rows();
+    int cols = target_matrix_.cols();
+    Layer & top_layer = layers_[layers_.size() - 1];
+    // Just assumptions we've used for implementing this function
+    assert(top_layer.value.d0() == rows * cols);
+    assert(top_layer.value.d1() == 1);
+    assert(top_layer.value.d2() == 1);
+    for (int i = 0; i < rows; ++i) {
+      for (int j = 0; j < cols; ++j) {
+        int k = i * cols + j;
+        float v = top_layer.value(k, 0, 0);
+        float t = target_matrix_(i, j);
+        top_layer.value_deriv(k, 0, 0) = v - t;
+      }
     }
   }
   

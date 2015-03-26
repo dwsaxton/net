@@ -24,6 +24,8 @@ public Q_SLOTS:
   void process();
 
 private:
+  void doAutoencoder();
+  void doDeep();
   void train(ConvNet *net, std::function<void ()> set_input_and_target);
   void test(ConvNet *net);
   

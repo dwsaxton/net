@@ -144,6 +144,25 @@ vector<LayerParams> createAutoencoderMiddle(int input_features, int middle_featu
 void Worker::process() {
   mnist_.init();
   
+//   doAutoencoder();
+  doDeep();
+}
+
+void Worker::doDeep() {
+  float weight_decay = 0.0001;
+  ConvNet *net = new ConvNet(createDeepMnist(), weight_decay);
+  
+  auto set_input_and_target = [&] () {
+    Image image = sampleRandomTraining();
+    MatrixXf transformed = image.generate(RandomTransform(10, 0.1, 2.5));
+    net->setInput(transformed);
+    net->setTarget(image.digit());
+  };
+  
+  train(net, set_input_and_target);
+}
+
+void Worker::doAutoencoder() {
   float weight_decay = 0.0001;
   ConvNet *net = new ConvNet(createAutoencoder(400), weight_decay);
   
@@ -182,6 +201,10 @@ void Worker::train(ConvNet *net, std::function<void ()> set_input_and_target) {
       interface_->updateImages(net);
     }
     
+    if (done % 5000 == 0) {
+      test(net);
+    }
+    
     if (done % 20000 == 0) {
       learning_rate *= 0.5;
       if (learning_rate < 1e-7) {
@@ -197,6 +220,7 @@ Image Worker::sampleRandomTraining() const {
 }
 
 static int test_number = 0;
+
 void Worker::test(ConvNet *net) {
   int test_count = mnist_.testCount();
   
