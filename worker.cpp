@@ -4,10 +4,11 @@
 using namespace std;
 
 #include "convnet.h"
+#include "interface.h"
 #include "mnist.h"
 
-Worker::Worker()
-{
+Worker::Worker(Interface *interface) {
+  interface_ = interface;
 }
 
 Worker::~Worker()
@@ -157,11 +158,11 @@ void Worker::process() {
   
   ConvNet *net2 = new ConvNet(createAutoencoderMiddle(400, 200), weight_decay);
   
-  set_input_and_target = [&] () {
+  auto set_input_and_target_2 = [&] () {
     // TODO this
   };
   
-  train(net2, set_input_and_target);
+  train(net2, set_input_and_target_2);
   
 }
 
@@ -173,8 +174,12 @@ void Worker::train(ConvNet *net, std::function<void ()> set_input_and_target) {
     net->forwardPass();
     net->backwardsPass(learning_rate);
     
+    if (done % 100 == 0) {
+      QCoreApplication::processEvents();
+    }
+    
     if (done % 2000 == 0) {
-      emit dataReady(net);
+      interface_->updateImages(net);
     }
     
     if (done % 20000 == 0) {

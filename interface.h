@@ -18,7 +18,6 @@ class Interface : public QWidget, public Ui::Interface {
 public:
   Interface();
   
-private slots:
   void updateImages(ConvNet*);
 
 private:

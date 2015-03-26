@@ -6,6 +6,7 @@ using namespace std;
 
 #include <QPainter>
 #include <QThread>
+#include <QTimer>
 
 #include "convnet.h"
 #include "cube.h"
@@ -52,12 +53,13 @@ Interface::Interface()
   
 //   showRandomTransformed();
   
-  QThread *thread = new QThread;
-  worker_ = new Worker;
-  worker_->moveToThread(thread);
-  connect(thread, SIGNAL(started()), worker_, SLOT(process()));
-  connect(worker_, SIGNAL(dataReady(ConvNet*)), this, SLOT(updateImages(ConvNet*)));
-  thread->start();
+//   QThread *thread = new QThread;
+  worker_ = new Worker(this);
+//   worker_->moveToThread(thread);
+//   connect(thread, SIGNAL(started()), worker_, SLOT(process()));
+//   connect(worker_, SIGNAL(dataReady(ConvNet*)), this, SLOT(updateImages(ConvNet*)));
+//   thread->start();
+  QTimer::singleShot(200, worker_, SLOT(process()));
 }
 
 QImage toQImage(MatrixXf values, float min = 0, float max = 1) {
