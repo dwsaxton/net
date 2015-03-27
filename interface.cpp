@@ -102,17 +102,14 @@ void Interface::showRandomTransformed() {
 
 void Interface::showFirstLayer(ConvNet* net) {
   Layer const& layer = net->layers_[1];
-  float mn = HUGE_VAL;
-  float mx = -HUGE_VAL;
   
-  int features = layer.kernels.size();
+  int features = std::min(layer.kernels.size(), (long unsigned int) 25);
   
   for (int i = 0; i < features; ++i) {
+    float mn = HUGE_VAL;
+    float mx = -HUGE_VAL;
     mn = min(mn, layer.kernels[i].cube.minCoeff());
     mx = max(mx, layer.kernels[i].cube.maxCoeff());
-  }
-  
-  for (int i = 0; i < features; ++i) {
     QImage image = toQImage(layer.kernels[i].cube.layer(0), mn, mx);
     images_[i]->setPixmap(QPixmap::fromImage(image.scaled(100, 100)));
   }
@@ -128,9 +125,10 @@ void Interface::showFailingSample() {
 void Interface::showAutoencoded(ConvNet* net) {
   for (int i = 0; i < 10; ++i) {
     int at = i + (i >= 5 ? 5 : 0);
-    Image image = worker_->sampleRandomTraining();
-    images_[at]->setPixmap(QPixmap::fromImage(toQImage(image.original())));
-    net->setInput(image.original());
+//     MatrixXf image = worker_->sampleAutoencoder();
+    MatrixXf image = worker_->sampleRandomTraining().original();
+    images_[at]->setPixmap(QPixmap::fromImage(toQImage(image)));
+    net->setInput(image);
     net->forwardPass();
     VectorXf output = net->getOutput();
     assert(output.size() == 28 * 28);
@@ -144,9 +142,9 @@ void Interface::showAutoencoded(ConvNet* net) {
 
 
 void Interface::updateImages(ConvNet* net) {
-  showFirstLayer(net);
-  showFailingSample();
-//   showAutoencoded(net);
+//   showFirstLayer(net);
+//   showFailingSample();
+  showAutoencoded(net);
   
   
   

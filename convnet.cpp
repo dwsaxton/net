@@ -78,13 +78,13 @@ float getScaleFactor(Cube const& values) {
   return factor;
 }
 
-void scale(Cube const& input_cube, Cube &output_cube) {
+void scale(float multiplier, Cube const& input_cube, Cube &output_cube) {
   output_cube = input_cube;
-  output_cube /= getScaleFactor(input_cube);
+  output_cube /= getScaleFactor(input_cube) / multiplier;
 }
 
-void scaleBack(Cube const& output_cube_deriv, Cube const& input_cube_value, Cube & input_cube_deriv) {
-  float factor = getScaleFactor(input_cube_value);
+void scaleBack(float multiplier, Cube const& output_cube_deriv, Cube const& input_cube_value, Cube & input_cube_deriv) {
+  float factor = getScaleFactor(input_cube_value) / multiplier;
   input_cube_deriv = output_cube_deriv;
   input_cube_deriv /= factor;
   
@@ -96,7 +96,7 @@ void scaleBack(Cube const& output_cube_deriv, Cube const& input_cube_value, Cube
   for (int i = 0; i < input_cube_value.d0() && !found; ++i) {
     for (int j = 0; j < input_cube_value.d1() && !found; ++j) {
       for (int k = 0; k < input_cube_value.d2(); ++k) {
-        if (abs(input_cube_value(i, j, k)) == factor) {
+        if (abs(input_cube_value(i, j, k)) / multiplier == factor) {
           max_i = i;
           max_j = j;
           max_k = k;
@@ -123,7 +123,7 @@ void scaleBack(Cube const& output_cube_deriv, Cube const& input_cube_value, Cube
       output_cube_deriv.layer(0).cwiseProduct(input_cube_value.layer(0)).sum() / value / factor;
 }
 
-float leak = 1;
+float leak = 0.01;
 void setLeak(float l) {
   leak = l;
 }
@@ -217,6 +217,16 @@ void ConvNet::setInput(MatrixXf const& input_data) {
   }
 }
 
+void ConvNet::setInput(VectorXf const& input) {
+  assert(layers_[0].value.d0() == input.size());
+  assert(layers_[0].value.d1() == 1);
+  assert(layers_[0].value.d2() == 1);
+  
+  for (int i = 0; i < input.size(); ++i) {
+    layers_[0].value(i, 0, 0) = input(i);
+  }
+}
+
 void ConvNet::forwardPass() {
   for (int layer = 1; layer < layers_.size(); ++layer) {
     Layer const& input = layers_[layer - 1];
@@ -227,7 +237,7 @@ void ConvNet::forwardPass() {
         // already handled
         continue;
       case LayerParams::Scale:
-        scale(input.value, output.value);
+        scale(output.params.scale, input.value, output.value);
         continue;
       case LayerParams::SoftMax:
         softMax(input.value, output.value);
@@ -294,7 +304,7 @@ void ConvNet::backwardsPass(float learning_rate) {
         assert(false); // should only be initial layer for layer = 0
         continue;
       case LayerParams::Scale:
-        scaleBack(output.value_deriv, input.value, input.value_deriv);
+        scaleBack(output.params.scale, output.value_deriv, input.value, input.value_deriv);
         continue;
       case LayerParams::SoftMax:
         softMaxBack(output.value, output.value_deriv, input.value_deriv);
@@ -306,16 +316,25 @@ void ConvNet::backwardsPass(float learning_rate) {
     }
   }
   
+  float max_abs = 1;
   for (int layer = 1; layer < layers_.size(); ++layer) {
-    if (layers_[layer].params.connection_type != LayerParams::SoftMax
-        && layers_[layer].params.connection_type != LayerParams::Scale) {
-      layers_[layer].update(MOMENTUM, learning_rate, weight_decay);
+    if (layers_[layer].params.connection_type == LayerParams::Convolution) {
+      for (int i = 0; i < layers_[layer].kernels_deriv.size(); ++i) {
+        max_abs = max(max_abs, layers_[layer].kernels_deriv[i].cube.maxCoeff());
+        max_abs = max(max_abs, -layers_[layer].kernels_deriv[i].cube.minCoeff());
+      }
+    }
+  }
+  
+  for (int layer = 1; layer < layers_.size(); ++layer) {
+    if (layers_[layer].params.connection_type == LayerParams::Convolution) {
+      layers_[layer].update(MOMENTUM, learning_rate / max_abs, weight_decay);
     }
   }
 }
 
-VectorXf ConvNet::getOutput() const {
-  MatrixXf layer = layers_[layers_.size() - 1].value.layer(0);
+VectorXf ConvNet::getOutputPrior(int from_top) const {
+  MatrixXf layer = layers_[layers_.size() - 1 - from_top].value.layer(0);
   if (layer.cols() == 1) {
     return layer.block(0, 0, layer.rows(), 1);
   } else {
@@ -324,14 +343,12 @@ VectorXf ConvNet::getOutput() const {
   }
 }
 
+VectorXf ConvNet::getOutput() const {
+  return getOutputPrior(0);
+}
+
 VectorXf ConvNet::getOutput2() const {
-  MatrixXf layer = layers_[layers_.size() - 2].value.layer(0);
-  if (layer.cols() == 1) {
-    return layer.block(0, 0, layer.rows(), 1);
-  } else {
-    assert(layer.rows() == 1);
-    return layer.block(0, 0, 1, layer.cols());
-  }
+  return getOutputPrior(1);
 }
 
 Layer::Layer() {
@@ -375,6 +392,10 @@ void Layer::update(float momentum_decay, float eps, float weight_decay) {
     kernels[i].addScaled(eps * weight_decay, kernels[i]);
     
 //     kernels[i].addScaled(-eps, kernels_deriv[i]);
+
+//     if (rand() % 400000 == 0) {
+//       cout << "n2: " << kernels[i].cube.squaredNorm() << endl;
+//     }
   }
   
 //   for (int i = 0; i < kernels.size(); ++i) {

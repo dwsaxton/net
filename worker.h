@@ -19,6 +19,8 @@ public:
   Image failing[10];
   
   Image sampleRandomTraining() const;
+  
+  MatrixXf sampleAutoencoder() const;
 
 public Q_SLOTS:
   void process();
@@ -26,7 +28,7 @@ public Q_SLOTS:
 private:
   void doAutoencoder();
   void doDeep();
-  void train(ConvNet *net, std::function<void ()> set_input_and_target);
+  void train(ConvNet *net, std::function<void ()> set_input_and_target, std::function<void ()> print_status, bool update_images);
   void test(ConvNet *net);
   
   Mnist mnist_;

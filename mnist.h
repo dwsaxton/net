@@ -14,8 +14,8 @@ class QImage;
 class QPoint;
 class QPointF;
 
-const int TRAINING_COUNT = 6000;
-const int TEST_COUNT = 1000;
+const int TRAINING_COUNT = 60000;
+const int TEST_COUNT = 10000;
 
 class Image {
 public:

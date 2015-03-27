@@ -173,7 +173,7 @@ void Cube::setZero() {
 void Cube::setRandom() {
   for (int i = 0; i < height_; ++i) {
     data_[i].setRandom(); // (or = MatrixXf::random() ?)
-//     data_[i] *= 0.1;
+    data_[i] *= 0.1;
   }
 }
 

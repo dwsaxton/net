@@ -16,14 +16,18 @@ public:
   ConvNet(vector<LayerParams> const& params, float weight_decay);
   
   void setInput(MatrixXf const& input);
+  void setInput(VectorXf const& input);
   void forwardPass();
   void setTarget(MatrixXf const& target);
   void setTarget(int target);
   void backwardsPass(float learning_rate);
   VectorXf getOutput() const;
   VectorXf getOutput2() const;
+  VectorXf getOutputPrior(int from_top) const;
   
   vector<Layer> layers_;
+  
+  int getTargetInt() const { return target_int_; }
   
 private:
   void rescale();
@@ -46,7 +50,7 @@ public:
     Sigmoid,
   };
   
-  LayerParams() { edge = features = kernel = stride = 1; connection_type = Initial; neuron_type = ReLU; }
+  LayerParams() { edge = features = kernel = stride = 1; scale = 1; connection_type = Initial; neuron_type = ReLU; }
   
   // Connection with the previous layer
   ConnectionType connection_type;
@@ -60,6 +64,8 @@ public:
   int stride;
   // For use with Convolution, the neuron function to use
   NeuronType neuron_type;
+  // For scale type, the magnitude of the maximum coefficient
+  float scale;
 };
 
 class Kernel {

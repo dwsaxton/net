@@ -65,6 +65,7 @@ vector<LayerParams> createDeepMnist() {
   layer5.connection_type = LayerParams::Scale;
   layer5.features = 10;
   layer5.edge = 1;
+  layer5.scale = 7;
   
   LayerParams layer6;
   layer6.connection_type = LayerParams::SoftMax;
@@ -95,6 +96,7 @@ vector<LayerParams> createShallowMnist() {
   layer3.connection_type = LayerParams::Scale;
   layer3.features= 10;
   layer3.edge = 1;
+  layer3.scale = 7;
   
   LayerParams layer4;
   layer4.connection_type = LayerParams::SoftMax;
@@ -120,6 +122,10 @@ vector<LayerParams> createAutoencoder(int middle_features) {
   layer2.features = 28 * 28;
   layer2.neuron_type = LayerParams::Sigmoid;
   
+//   LayerParams layer3;
+//   layer3.connection_type = LayerParams::Scale;
+//   layer3.features= 28 * 28;
+  
   return vector<LayerParams>({layer0, layer1, layer2});
 }
 
@@ -144,8 +150,8 @@ vector<LayerParams> createAutoencoderMiddle(int input_features, int middle_featu
 void Worker::process() {
   mnist_.init();
   
-//   doAutoencoder();
-  doDeep();
+  doAutoencoder();
+//   doDeep();
 }
 
 void Worker::doDeep() {
@@ -159,34 +165,84 @@ void Worker::doDeep() {
     net->setTarget(image.digit());
   };
   
-  train(net, set_input_and_target);
+  auto print_status = [&] () {
+    cout << net->getOutput().transpose() << " t=" << net->getTargetInt() << endl;
+    cout << net->getOutput2().transpose() << endl;
+  };
+  
+  train(net, set_input_and_target, print_status, true);
 }
+
+MatrixXf Worker::sampleAutoencoder() const {;
+  MatrixXf input(28, 28);
+  input.setZero();
+  int a = rand() % 24;
+  int b = rand() % 24;
+  int c = rand() % 24;
+  int d = rand() % 24;
+  input.block(min(a, b), min(c, d), abs(b - a) + 4, abs(d - c) + 4).setConstant(1);
+  return input;
+}
+  
 
 void Worker::doAutoencoder() {
   float weight_decay = 0.0001;
-  ConvNet *net = new ConvNet(createAutoencoder(400), weight_decay);
+  const int first = 100;
+  const int second = 50;
+  const int third = 25;
+  ConvNet *net = new ConvNet(createAutoencoder(first), weight_decay);
   
   auto set_input_and_target = [&] () {
-    Image image = sampleRandomTraining();
-    MatrixXf transformed = image.generate(RandomTransform(10, 0.1, 2.5));
-    net->setInput(transformed);
-    net->setTarget(transformed);
+    MatrixXf target = sampleRandomTraining().generate(RandomTransform(10, 0.1, 2.5));
+//     MatrixXf target = sampleAutoencoder();
+    
+    MatrixXf noisy = target + 0.5 * MatrixXf::Random(28, 28);
+    net->setInput(noisy);
+    net->setTarget(target);
   };
   
-  train(net, set_input_and_target);
+  auto print_status = [] () {
+  };
   
-  ConvNet *net2 = new ConvNet(createAutoencoderMiddle(400, 200), weight_decay);
+  train(net, set_input_and_target, print_status, true);
   
+  ConvNet *net2 = new ConvNet(createAutoencoderMiddle(first, second), weight_decay);
   auto set_input_and_target_2 = [&] () {
-    // TODO this
+    MatrixXf outer = sampleRandomTraining().generate(RandomTransform(10, 0.1, 2.5));
+    net->setInput(outer);
+    net->forwardPass();
+    VectorXf middle = net->getOutput2();
+    VectorXf noisy = middle + 0.5 * VectorXf::Random(first);
+    net2->setInput(noisy);
+    net2->setTarget(middle);
   };
+  train(net2, set_input_and_target_2, print_status, false);
   
-  train(net2, set_input_and_target_2);
+  net->layers_.insert(net->layers_.begin() + 2, net2->layers_[1]);
+  net->layers_.insert(net->layers_.begin() + 3, net2->layers_[2]);
+  train(net, set_input_and_target, print_status, true);
   
+  ConvNet *net3 = new ConvNet(createAutoencoderMiddle(second, third), weight_decay);
+  auto set_input_and_target_3 = [&] () {
+    MatrixXf outer = sampleRandomTraining().generate(RandomTransform(10, 0.1, 2.5));
+    net->setInput(outer);
+    net->forwardPass();
+    VectorXf middle = net->getOutputPrior(2);
+    VectorXf noisy = middle + 0.5 * VectorXf::Random(first);
+    net3->setInput(noisy);
+    net3->setTarget(middle);
+  };
+  train(net3, set_input_and_target_3, print_status, false);
+  
+  net->layers_.insert(net->layers_.begin() + 3, net3->layers_[1]);
+  net->layers_.insert(net->layers_.begin() + 4, net3->layers_[2]);
+  train(net, set_input_and_target, print_status, true);
 }
 
-void Worker::train(ConvNet *net, std::function<void ()> set_input_and_target) {
-  float learning_rate = 0.001;
+void Worker::train(ConvNet *net, std::function<void ()> set_input_and_target, std::function<void ()> print_status, bool update_images) {
+  float learning_rate = 0.01;
+  float leak = 0.01;
+  setLeak(leak);
   
   for (int done = 1; done < 100000; ++done) {
     set_input_and_target();
@@ -197,20 +253,30 @@ void Worker::train(ConvNet *net, std::function<void ()> set_input_and_target) {
       QCoreApplication::processEvents();
     }
     
-    if (done % 2000 == 0) {
+    if (done % 2000 == 0 && update_images) {
       interface_->updateImages(net);
     }
     
     if (done % 5000 == 0) {
-      test(net);
+//       test(net);
+      print_status();
     }
     
-    if (done % 20000 == 0) {
+    if (done % 10000 == 0) {
       learning_rate *= 0.5;
       if (learning_rate < 1e-7) {
         learning_rate = 1e-7;
       }
       cout << "decreased learning rate to " << learning_rate << endl;
+    }
+    
+    if (done % 2000 == 0 && leak > 0) {
+      leak *= 0.7;
+      if (leak < 1e-8) {
+        leak = 0;
+      }
+      setLeak(leak);
+      cout << "decreased leak to " << leak << endl;
     }
   }
 }
@@ -230,6 +296,7 @@ void Worker::test(ConvNet *net) {
   for (int i = 0; i < test_count; ++i) {
     Image image = mnist_.getTraining(i);
     net->setInput(image.original());
+    net->forwardPass();
     VectorXf out = net->getOutput();
     int target_digit = image.digit();
     bool good = isCorrect(out, target_digit);
